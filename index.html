@@ -1,0 +1,3086 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3b82f6">
+<script>
+  // Enregistrement du service worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(registration => {
+          console.log('Service Worker enregistré!', registration);
+        })
+        .catch(error => {
+          console.log('Erreur d\'enregistrement du Service Worker:', error);
+        });
+    });
+  }
+</script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Système de Documentation d'Église</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#8b5cf6',
+                        pasteur: '#86efac', // Vert clair
+                        corpsPastoral: '#fca5a5', // Rouge clair
+                        departement: '#d8b4fe', // Violet clair
+                        secretariat: '#d1d5db', // Gris clair
+                        finance: '#fcd34d', // Jaune
+                        jeunesse: '#fdba74', // Orange clair
+                        missions: '#a5b4fc', // Bleu-violet clair
+                        intercession: '#bae6fd', // Bleu ciel
+                    }
+                }
+            }
+        }
+
+        // Détection du mode sombre
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+    </script>
+    <style>
+        .org-node {
+            transition: all 0.3s ease;
+            border: 2px solid #4b5563;
+            cursor: pointer;
+        }
+        
+        .org-node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        
+        .org-line {
+            stroke: #4b5563;
+            stroke-width: 2px;
+        }
+        
+        .content-section {
+            transition: max-height 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .section-collapsed {
+            max-height: 0;
+        }
+        
+        .section-expanded {
+            max-height: 2000px;
+        }
+        
+        @media print {
+            body {
+                font-size: 12pt;
+                color: black;
+                background-color: white;
+            }
+            
+            .no-print {
+                display: none !important;
+            }
+            
+            .print-only {
+                display: block !important;
+            }
+            
+            .print-break-before {
+                page-break-before: always;
+            }
+            
+            .print-break-after {
+                page-break-after: always;
+            }
+        }
+        
+        /* Canvas pour l'exportation d'organigramme */
+        #exportCanvas {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-primary mb-2">Système de Documentation d'Église</h1>
+            <p class="text-xl text-gray-600 dark:text-gray-400">Gestion organisationnelle et documentation complète</p>
+        </header>
+        
+        <!-- Navigation principale -->
+        <nav class="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+            <ul class="flex flex-wrap justify-center space-x-2 space-y-2 md:space-y-0">
+                <li>
+                    <button id="navOrganigrammes" class="px-4 py-2 bg-primary text-white rounded-md">
+                        <i class="fas fa-sitemap mr-2"></i>Organigrammes
+                    </button>
+                </li>
+                <li>
+                    <button id="navDocumentation" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md">
+                        <i class="fas fa-file-alt mr-2"></i>Documentation
+                    </button>
+                </li>
+                <li>
+                    <button id="navGeneration" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md">
+                        <i class="fas fa-file-export mr-2"></i>Génération
+                    </button>
+                </li>
+                <li>
+                    <button id="navEdition" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md">
+                        <i class="fas fa-edit mr-2"></i>Édition
+                    </button>
+                </li>
+            </ul>
+        </nav>
+        
+        <!-- Section des organigrammes -->
+        <section id="sectionOrganigrammes" class="mb-10">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-sitemap mr-2 text-primary"></i>
+                    Organigrammes de l'Église
+                </h2>
+                
+                <div class="mb-4">
+                    <select id="organigrammeSelect" class="w-full md:w-1/2 p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                        <option value="principal">Organigramme Principal</option>
+                        <option value="secretariat">Département Secrétariat</option>
+                        <option value="pasteur">Pasteur et Corps Pastoral</option>
+                        <option value="intercession">Département Intercession</option>
+                        <option value="jeunesse">Département Jeunesse</option>
+                        <option value="evangelisation">Département Évangélisation</option>
+                        <option value="musique">Département Musique</option>
+                        <option value="formation">Département Formation</option>
+                        <option value="accueil">Département Accueil et Protocole</option>
+                        <option value="finances">Département Finances</option>
+                        <option value="technique">Département Technique et Logistique</option>
+                        <option value="affaires">Département Affaires Sociales</option>
+                    </select>
+                </div>
+                
+                <div class="flex justify-end mb-4">
+                    <button id="exportOrgBtn" class="px-4 py-2 bg-green-600 text-white rounded-md flex items-center">
+                        <i class="fas fa-download mr-2"></i>Exporter l'organigramme
+                    </button>
+                </div>
+                
+                <div id="organigrammeContainer" class="w-full overflow-x-auto bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 min-h-[500px]">
+                    <!-- L'organigramme sera généré ici -->
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section de documentation -->
+        <section id="sectionDocumentation" class="mb-10 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-file-alt mr-2 text-primary"></i>
+                    Documentation des Départements
+                </h2>
+                
+                <div class="mb-4">
+                    <select id="departmentDocsSelect" class="w-full md:w-1/2 p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                        <option value="secretariat">Secrétariat Général</option>
+                        <option value="intercession">Département Intercession</option>
+                        <option value="jeunesse">Département Jeunesse</option>
+                        <option value="evangelisation">Département Évangélisation</option>
+                        <option value="musique">Département Musique</option>
+                        <option value="formation">Département Formation</option>
+                        <option value="accueil">Département Accueil et Protocole</option>
+                        <option value="finances">Département Finances</option>
+                        <option value="technique">Département Technique et Logistique</option>
+                        <option value="affaires">Département Affaires Sociales</option>
+                    </select>
+                </div>
+                
+                <div id="departmentDocsContainer" class="mt-6">
+                    <!-- La documentation du département sera générée ici -->
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section de génération de documents -->
+        <section id="sectionGeneration" class="mb-10 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-file-export mr-2 text-primary"></i>
+                    Génération de Documents
+                </h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">Générer un document complet</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4">Créez un document PDF complet contenant tous les départements ou un département spécifique.</p>
+                    
+                    <div class="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+                        <select id="docTypeSelect" class="p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                            <option value="all">Document complet (tous les départements)</option>
+                            <option value="specific">Document d'un département spécifique</option>
+                        </select>
+                        
+                        <select id="specificDeptSelect" class="p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 hidden">
+                            <option value="secretariat">Secrétariat Général</option>
+                            <option value="intercession">Département Intercession</option>
+                            <option value="jeunesse">Département Jeunesse</option>
+                            <option value="evangelisation">Département Évangélisation</option>
+                            <option value="musique">Département Musique</option>
+                            <option value="formation">Département Formation</option>
+                            <option value="accueil">Département Accueil et Protocole</option>
+                            <option value="finances">Département Finances</option>
+                            <option value="technique">Département Technique et Logistique</option>
+                            <option value="affaires">Département Affaires Sociales</option>
+                        </select>
+                        
+                        <button id="generateDocBtn" class="px-4 py-2 bg-primary text-white rounded-md flex items-center">
+                            <i class="fas fa-file-pdf mr-2"></i>Générer le document
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">Imprimer les organigrammes</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4">Imprimez l'organigramme principal ou les organigrammes de chaque département.</p>
+                    
+                    <div class="flex flex-col md:flex-row md:items-center gap-4">
+                        <select id="printOrgSelect" class="p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                            <option value="principal">Organigramme Principal</option>
+                            <option value="all">Tous les organigrammes</option>
+                            <option value="secretariat">Organigramme Secrétariat</option>
+                            <option value="intercession">Organigramme Intercession</option>
+                            <option value="jeunesse">Organigramme Jeunesse</option>
+                            <option value="evangelisation">Organigramme Évangélisation</option>
+                            <option value="musique">Organigramme Musique</option>
+                            <option value="formation">Organigramme Formation</option>
+                            <option value="accueil">Organigramme Accueil et Protocole</option>
+                            <option value="finances">Organigramme Finances</option>
+                            <option value="technique">Organigramme Technique</option>
+                            <option value="affaires">Organigramme Affaires Sociales</option>
+                        </select>
+                        
+                        <button id="printOrgBtn" class="px-4 py-2 bg-green-600 text-white rounded-md flex items-center">
+                            <i class="fas fa-print mr-2"></i>Imprimer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section d'édition -->
+        <section id="sectionEdition" class="mb-10 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-edit mr-2 text-primary"></i>
+                    Édition de la Documentation
+                </h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">Modifier un département</h3>
+                    
+                    <div class="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+                        <select id="editDeptSelect" class="p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                            <option value="secretariat">Secrétariat Général</option>
+                            <option value="intercession">Département Intercession</option>
+                            <option value="jeunesse">Département Jeunesse</option>
+                            <option value="evangelisation">Département Évangélisation</option>
+                            <option value="musique">Département Musique</option>
+                            <option value="formation">Département Formation</option>
+                            <option value="accueil">Département Accueil et Protocole</option>
+                            <option value="finances">Département Finances</option>
+                            <option value="technique">Département Technique et Logistique</option>
+                            <option value="affaires">Département Affaires Sociales</option>
+                        </select>
+                        
+                        <select id="editSectionSelect" class="p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700">
+                            <option value="definition">Définition</option>
+                            <option value="roles">Rôles</option>
+                            <option value="attributions">Attributions</option>
+                            <option value="postes">Postes et tâches attribuées</option>
+                            <option value="equipements">Équipements</option>
+                            <option value="programmes">Programmes</option>
+                        </select>
+                        
+                        <button id="loadEditBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center">
+                            <i class="fas fa-edit mr-2"></i>Modifier
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="editFormContainer" class="hidden">
+                    <textarea id="editContentTextarea" class="w-full h-64 p-3 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 font-mono"></textarea>
+                    
+                    <div class="flex justify-end mt-4 space-x-2">
+                        <button id="cancelEditBtn" class="px-4 py-2 bg-gray-500 text-white rounded-md">
+                            Annuler
+                        </button>
+                        <button id="saveEditBtn" class="px-4 py-2 bg-green-600 text-white rounded-md">
+                            Enregistrer
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Ajouter un nouveau poste -->
+                <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="text-xl font-semibold mb-3">Ajouter un nouveau poste</h3>
+                    
+                    <div class="mb-4">
+                        <select id="addPosteDeptSelect" class="w-full p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 mb-3">
+                            <option value="secretariat">Secrétariat Général</option>
+                            <option value="intercession">Département Intercession</option>
+                            <option value="jeunesse">Département Jeunesse</option>
+                            <option value="evangelisation">Département Évangélisation</option>
+                            <option value="musique">Département Musique</option>
+                            <option value="formation">Département Formation</option>
+                            <option value="accueil">Département Accueil et Protocole</option>
+                            <option value="finances">Département Finances</option>
+                            <option value="technique">Département Technique et Logistique</option>
+                            <option value="affaires">Département Affaires Sociales</option>
+                        </select>
+                        
+                        <input type="text" id="newPosteTitle" placeholder="Titre du poste" class="w-full p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 mb-3">
+                        
+                        <textarea id="newPosteTasks" placeholder="Description des tâches (une par ligne)" rows="5" class="w-full p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 mb-3"></textarea>
+                        
+                        <select id="newPosteLevel" class="w-full p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 mb-3">
+                            <option value="1">Niveau 1 (Responsable principal)</option>
+                            <option value="2">Niveau 2 (Adjoint/Chargé)</option>
+                            <option value="3">Niveau 3 (Assistant/Membre)</option>
+                        </select>
+                        
+                        <button id="addPosteBtn" class="px-4 py-2 bg-green-600 text-white rounded-md">
+                            Ajouter le poste
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <!-- Modal pour l'aperçu des documents -->
+    <div id="documentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-xl font-bold text-primary">Aperçu du Document</h3>
+                <button id="closeDocumentModalBtn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="documentContent" class="p-6 overflow-y-auto flex-grow bg-white text-black">
+                <!-- Le contenu du document sera généré ici -->
+            </div>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                <button id="downloadDocumentBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-opacity-90 transition-colors">
+                    <i class="fas fa-download mr-2"></i> Télécharger
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Canvas pour l'exportation -->
+    <canvas id="exportCanvas"></canvas>
+
+    <script>
+        // Définition des données pour chaque département
+        const departmentsData = {
+            secretariat: {
+                title: "Secrétariat Général",
+                definition: "Le Secrétariat est un département dédié à la réalisation des activités administratives et de soutien à l'église.",
+                roles: [
+                    "La gestion administrative de l'église",
+                    "La gestion des communications internes et externes",
+                    "Le soutien et assistance aux responsables et aux pasteurs",
+                    "L'organisation et suivi des données et documents de l'église"
+                ],
+                attributions: {
+                    administratives: [
+                        "La gestion des agendas du pasteur, des responsables et des réunions",
+                        "L'organisation des activités et événements de l'église",
+                        "La gestion des courriers, documents et archives",
+                        "Le suivi des dons et des finances",
+                        "La gestion des adhésions et de l'intégration des nouveaux membres"
+                    ],
+                    communication: [
+                        "La communication interne et externe (annonces, affichages, bulletins d'information)",
+                        "La rédaction et diffusion des comptes rendus des réunions",
+                        "La gestion des relations externes de l'église (partenaires, autres institutions religieuses, autorités)"
+                    ]
+                },
+                postes: {
+                    "Secrétaire administratif": [
+                        "Préparer et organiser les réunions de travail et autres rencontres au sein de l'église",
+                        "Organiser les séminaires, ateliers et conférences",
+                        "Organiser les listes des personnes en services (modérateurs, protocoles, orateurs)",
+                        "Établir un calendrier des différentes formations",
+                        "S'assurer de la conformité des équipements avant le début des cultes et des différentes activités"
+                    ],
+                    "Chargé des finances": [
+                        "Faire rapport de l'état des finances de l'église",
+                        "Diriger les opérations de finances et appel de fonds",
+                        "Engager les dépenses pour le fonctionnement de l'église selon l'ordre des priorités",
+                        "Centraliser les situations financières de chaque structure de l'église",
+                        "S'entretenir avec les partenaires de l'église"
+                    ],
+                    "Chargé des courriers": [
+                        "Organiser et assurer la réception, le traitement et la ventilation du courrier entrant et sortant",
+                        "Superviser le courrier en circulation dans l'église",
+                        "Centraliser le courrier adressé aux structures",
+                        "Traiter les correspondances administratives externes",
+                        "Effectuer les travaux de saisie et de reproduction des textes et documents liés aux activités de l'église",
+                        "Préparer un procès-verbal des réunions des différentes structures",
+                        "Préparer les annonces et communiqués",
+                        "Préparer les rapports des différentes activités de l'église"
+                    ],
+                    "Chargé des relations et des rapports": [
+                        "Assurer la gestion des communications entre l'église et ces correspondants (églises, État, entreprises, ONG)",
+                        "Transmettre les annonces et communiqués",
+                        "Transmettre les rapports des différentes activités de l'église et des procès-verbaux des réunions",
+                        "Assurer les relations publiques et le protocole de réception des invités",
+                        "Faire rapport des réunions et des activités de l'église auprès du pasteur et du corps pastoral"
+                    ]
+                },
+                equipements: [
+                    "Papiers, stylos, crayons, lattes, registres, ordinateur"
+                ],
+                programmes: [
+                    "Un membre du secrétariat devra selon ses attributions se présenter au moins trente minutes avant le culte pour s'assurer de la conformité des équipements et que tout est en place pour le culte ou l'évènement en cours.",
+                    "Un membre du secrétariat devra selon ses attributions être présent lors de toute réunion interne ou externe incluant la présence du pasteur ou des membres du corps pastoral, sauf s'il s'agit d'une réunion qui concerne le diacre et l'entité qu'il gère. Dans ce cas, c'est le secrétaire de l'entité qui transmettra le récit de la réunion au chargé des courriers.",
+                    "L'équipe se réunira une fois par mois pour faire des mises au point et pour prier, elle devra participer à tous les programmes dédiés aux ouvriers."
+                ],
+                structure: [
+                    {
+                        title: "Secrétaire Administratif",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Chargé des Finances",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Courriers",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Relations et des Rapports",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            intercession: {
+                title: "Département d'Intercession",
+                definition: "Le Département d'Intercession est un département dédié à l'organisation et la coordination des activités de prière au sein de l'église.",
+                roles: [
+                    "Organiser les sessions de prière régulières",
+                    "Coordonner les équipes d'intercesseurs",
+                    "Recevoir et traiter les requêtes de prière",
+                    "Former les membres à l'intercession efficace"
+                ],
+                attributions: {
+                    principales: [
+                        "Établir un programme de prière hebdomadaire et mensuel",
+                        "Maintenir une chaîne de prière continue",
+                        "Accompagner spirituellement les membres de l'église",
+                        "Organiser des veillées de prière et des jeûnes collectifs",
+                        "Assurer le suivi des requêtes de prière et des exaucements"
+                    ],
+                    specifiques: [
+                        "Préparer des thèmes de prière spécifiques pour différentes circonstances",
+                        "Mobiliser l'église pour des moments de prière lors des crises ou événements importants",
+                        "Développer des ressources d'enseignement sur la prière",
+                        "Collaborer avec d'autres départements pour couvrir leurs activités par la prière"
+                    ]
+                },
+                postes: {
+                    "Responsable d'Intercession": [
+                        "Superviser l'ensemble des activités du département",
+                        "Établir la vision et les objectifs du département",
+                        "Coordonner les différentes équipes d'intercession",
+                        "Rapporter au pasteur et au corps pastoral",
+                        "Représenter le département lors des réunions de direction"
+                    ],
+                    "Secrétaire d'Intercession": [
+                        "Gérer les documents administratifs du département",
+                        "Maintenir un registre des requêtes de prière",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Communiquer les informations importantes aux membres",
+                        "Établir le planning des intercesseurs"
+                    ],
+                    "Chargé des Requêtes": [
+                        "Recueillir les requêtes de prière des membres",
+                        "Classer les requêtes par urgence et catégorie",
+                        "Distribuer les requêtes aux équipes d'intercesseurs",
+                        "Assurer le suivi des requêtes et des exaucements",
+                        "Témoigner des exaucements pour encourager l'église"
+                    ],
+                    "Chargé des Programmes": [
+                        "Développer des thèmes et programmes de prière",
+                        "Planifier les événements spéciaux de prière",
+                        "Coordonner les équipes pour les veillées de prière",
+                        "Préparer les supports pour les sessions d'intercession",
+                        "Évaluer l'efficacité des programmes d'intercession"
+                    ],
+                    "Disciplinaire": [
+                        "Veiller au bon déroulement des séances de prière",
+                        "Maintenir l'ordre et le respect durant les réunions",
+                        "S'assurer que les intercesseurs suivent les directives",
+                        "Accompagner spirituellement les membres du département",
+                        "Signaler tout problème de comportement ou de doctrine"
+                    ]
+                },
+                equipements: [
+                    "Bibles, carnets de notes, registres de requêtes",
+                    "Huile d'onction, eau bénite (selon les pratiques de l'église)",
+                    "Tableau pour afficher les sujets de prière",
+                    "Tapis ou coussins de prière (si nécessaire)",
+                    "Instruments de musique pour l'adoration pendant l'intercession",
+                    "Timers pour gérer les temps de prière"
+                ],
+                programmes: [
+                    "Réunion d'intercession hebdomadaire (jour et heure fixe)",
+                    "Nuit de prière mensuelle (le premier vendredi du mois)",
+                    "Chaîne de prière 24h/24 (organisation par équipes)",
+                    "Formation trimestrielle des intercesseurs",
+                    "Retraite spirituelle annuelle pour le département",
+                    "Réunion administrative mensuelle pour évaluer les activités"
+                ],
+                structure: [
+                    {
+                        title: "Responsable d'Intercession",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire d'Intercession",
+                                level: 2
+                            },
+                            {
+                                title: "Disciplinaire",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Requêtes",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Programmes",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            jeunesse: {
+                title: "Département de Jeunesse",
+                definition: "Le Département de Jeunesse est chargé de l'encadrement, la formation et l'animation des activités destinées aux jeunes de l'église, généralement âgés de 13 à 30 ans.",
+                roles: [
+                    "Organiser des activités adaptées aux besoins et intérêts des jeunes",
+                    "Former les jeunes dans leur foi et leur développement personnel",
+                    "Encourager l'implication des jeunes dans la vie de l'église",
+                    "Offrir un environnement sain de socialisation et d'épanouissement"
+                ],
+                attributions: {
+                    principales: [
+                        "Élaborer et mettre en œuvre un programme annuel d'activités pour les jeunes",
+                        "Organiser des rencontres régulières (études bibliques, loisirs, formations)",
+                        "Établir un suivi personnalisé pour accompagner les jeunes dans leur croissance spirituelle",
+                        "Identifier et développer les talents et dons des jeunes",
+                        "Favoriser l'intégration des nouveaux jeunes"
+                    ],
+                    specifiques: [
+                        "Organiser des camps, retraites et sorties pour les jeunes",
+                        "Mettre en place des programmes de mentorat",
+                        "Développer des projets missionnaires adaptés aux jeunes",
+                        "Créer des équipes de louange composées de jeunes",
+                        "Organiser des événements intergénérationnels"
+                    ]
+                },
+                postes: {
+                    "Responsable Jeunesse": [
+                        "Superviser l'ensemble des activités du département",
+                        "Élaborer la vision et les objectifs annuels",
+                        "Coordonner les différentes équipes du département",
+                        "Rendre compte au pasteur et au corps pastoral",
+                        "Veiller à l'alignement des activités avec la vision de l'église"
+                    ],
+                    "Vice-Responsable Jeunesse": [
+                        "Seconder le responsable dans ses fonctions",
+                        "Superviser les activités en l'absence du responsable",
+                        "Coordonner les équipes d'animation",
+                        "Développer des stratégies pour atteindre plus de jeunes",
+                        "Évaluer l'efficacité des programmes"
+                    ],
+                    "Secrétaire": [
+                        "Gérer la documentation et les archives du département",
+                        "Tenir à jour la liste des jeunes et leurs coordonnées",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Communiquer les informations importantes aux jeunes",
+                        "Gérer le calendrier des activités"
+                    ],
+                    "Chargé des Activités": [
+                        "Planifier et organiser les événements récréatifs",
+                        "Coordonner les équipes d'animation",
+                        "Proposer des activités innovantes et attrayantes",
+                        "Gérer le matériel nécessaire aux activités",
+                        "Évaluer la participation des jeunes aux activités"
+                    ],
+                    "Chargé de l'Éducation": [
+                        "Élaborer les programmes de formation spirituelle",
+                        "Organiser les études bibliques et ateliers thématiques",
+                        "Identifier les besoins de formation des jeunes",
+                        "Préparer des ressources pédagogiques adaptées",
+                        "Évaluer la progression spirituelle des jeunes"
+                    ],
+                    "Trésorier": [
+                        "Gérer le budget du département",
+                        "Tenir les comptes à jour",
+                        "Établir des rapports financiers réguliers",
+                        "Planifier les collectes de fonds pour les projets",
+                        "Conseiller sur la faisabilité financière des activités"
+                    ],
+                    "Disciplinaire": [
+                        "Veiller au respect des règles et des valeurs",
+                        "Intervenir en cas de conflit ou de comportement inapproprié",
+                        "Accompagner les jeunes en difficulté",
+                        "Promouvoir un environnement sain et respectueux",
+                        "Former les jeunes à la discipline personnelle"
+                    ]
+                },
+                equipements: [
+                    "Matériel audiovisuel (enceintes, microphones, vidéoprojecteur)",
+                    "Instruments de musique",
+                    "Bibles et manuels d'étude",
+                    "Matériel sportif et récréatif",
+                    "Ordinateur et imprimante pour la préparation des documents",
+                    "Fournitures de bureau et supports pédagogiques"
+                ],
+                programmes: [
+                    "Rencontre hebdomadaire des jeunes (samedi ou dimanche après-midi)",
+                    "Étude biblique spéciale jeunes (une fois par semaine)",
+                    "Activités sportives bimensuelles",
+                    "Sortie ou excursion trimestrielle",
+                    "Camp annuel des jeunes (vacances scolaires)",
+                    "Formation au leadership (mensuelle pour les responsables de groupes)",
+                    "Participation aux événements de la communauté (service communautaire, évangélisation)"
+                ],
+                structure: [
+                    {
+                        title: "Responsable Jeunesse",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire",
+                                level: 2
+                            },
+                            {
+                                title: "Vice-Responsable Jeunesse",
+                                level: 2,
+                                subNodes: [
+                                    {
+                                        title: "Chargé des Activités",
+                                        level: 3,
+                                        subNodes: [
+                                            { title: "Secrétaire", level: 4 },
+                                            { title: "Trésorier", level: 4 },
+                                            { title: "Disciplinaire", level: 4 }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                title: "Chargé de l'Éducation",
+                                level: 2,
+                                subNodes: [
+                                    { title: "Chargé de Planification", level: 3 },
+                                    { title: "Chargé d'Activité", level: 3 },
+                                    { title: "Trésorier", level: 3 }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            evangelisation: {
+                title: "Département d'Évangélisation",
+                definition: "Le Département d'Évangélisation est responsable de la propagation de l'Évangile, de l'organisation des campagnes d'évangélisation et du suivi des nouveaux convertis.",
+                roles: [
+                    "Planifier et organiser des activités d'évangélisation",
+                    "Former les membres à l'évangélisation personnelle",
+                    "Assurer le suivi et l'intégration des nouveaux convertis",
+                    "Développer des stratégies d'évangélisation adaptées au contexte local"
+                ],
+                attributions: {
+                    principales: [
+                        "Élaborer un plan stratégique d'évangélisation",
+                        "Organiser des campagnes d'évangélisation régulières",
+                        "Mettre en place un système de suivi des nouveaux convertis",
+                        "Établir des partenariats avec d'autres églises pour des actions conjointes",
+                        "Évaluer l'efficacité des méthodes d'évangélisation employées"
+                    ],
+                    specifiques: [
+                        "Développer des outils d'évangélisation adaptés",
+                        "Former les équipes d'évangélisation",
+                        "Organiser des visites à domicile et dans les hôpitaux",
+                        "Coordonner la distribution de littérature chrétienne",
+                        "Mettre en place des programmes pour les différents groupes cibles"
+                    ]
+                },
+                postes: {
+                    "Responsable d'Évangélisation": [
+                        "Superviser l'ensemble des activités du département",
+                        "Élaborer les stratégies d'évangélisation",
+                        "Coordonner les différentes équipes",
+                        "Rendre compte au pasteur et au corps pastoral",
+                        "Représenter le département aux réunions de direction"
+                    ],
+                    "Secrétaire": [
+                        "Gérer les documents administratifs du département",
+                        "Tenir à jour les registres des nouveaux convertis",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Planifier les calendriers d'activités",
+                        "Assurer la communication interne du département"
+                    ],
+                    "Vice Responsable Suivi des Membres": [
+                        "Organiser le suivi des nouveaux convertis",
+                        "Coordonner les équipes de suivi",
+                        "Évaluer l'intégration des nouveaux membres",
+                        "Développer des outils de suivi efficaces",
+                        "Rapporter sur la fidélisation des nouveaux convertis"
+                    ],
+                    "Chargé des Listes et des Équipes": [
+                        "Maintenir les listes à jour des membres des équipes",
+                        "Organiser la répartition des tâches",
+                        "Coordonner les différentes équipes d'évangélisation",
+                        "Évaluer les performances des équipes",
+                        "Identifier les besoins en formation"
+                    ],
+                    "Chargé de l'Accueil des Nouveaux": [
+                        "Développer un système d'accueil chaleureux",
+                        "Former les équipes d'accueil",
+                        "Préparer le matériel pour les nouveaux arrivants",
+                        "Organiser des rencontres d'intégration",
+                        "Assurer le suivi initial des nouveaux venus"
+                    ],
+                    "Chargé des Programmes et Planification": [
+                        "Élaborer le calendrier des activités d'évangélisation",
+                        "Préparer les détails logistiques des événements",
+                        "Coordonner avec les autres départements impliqués",
+                        "Évaluer et ajuster les programmes selon les résultats",
+                        "Développer des approches innovantes d'évangélisation"
+                    ],
+                    "Chargé des Déplacements et Équipements": [
+                        "Organiser les transports pour les équipes",
+                        "Gérer le matériel d'évangélisation",
+                        "Préparer l'équipement nécessaire pour les campagnes",
+                        "Veiller à la maintenance du matériel",
+                        "Évaluer les besoins en équipement"
+                    ],
+                    "Trésorier": [
+                        "Gérer le budget du département",
+                        "Tenir les comptes à jour",
+                        "Préparer les rapports financiers",
+                        "Planifier les besoins financiers des activités",
+                        "Conseiller sur la faisabilité financière des projets"
+                    ],
+                    "Disciplinaire": [
+                        "Veiller à la conduite appropriée des membres du département",
+                        "Assurer le respect des valeurs et principes de l'église",
+                        "Intervenir en cas de comportement inapproprié",
+                        "Former les membres aux normes éthiques de l'évangélisation",
+                        "Accompagner spirituellement les équipes"
+                    ]
+                },
+                equipements: [
+                    "Bibles et littérature évangélique",
+                    "Matériel audiovisuel (enceintes, microphones)",
+                    "Banderoles et affiches pour les campagnes",
+                    "Système de sonorisation portable",
+                    "Formulaires de suivi et registres",
+                    "Tracts et brochures évangéliques",
+                    "Véhicules pour les déplacements (si disponibles)"
+                ],
+                programmes: [
+                    "Évangélisation de rue hebdomadaire",
+                    "Campagne d'évangélisation trimestrielle",
+                    "Formation mensuelle des évangélistes",
+                    "Suivi hebdomadaire des nouveaux convertis",
+                    "Visite à domicile bimensuelle",
+                    "Réunion administrative mensuelle",
+                    "Programme d'intégration des nouveaux membres (6 semaines)"
+                ],
+                structure: [
+                    {
+                        title: "Responsable d'Évangélisation",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire",
+                                level: 2
+                            },
+                            {
+                                title: "Vice Responsable Suivi des Membres",
+                                level: 2,
+                                subNodes: [
+                                    { title: "Chargé des Listes et des Équipes", level: 3 },
+                                    { title: "Chargé de l'Accueil des Nouveaux", level: 3 },
+                                    { title: "Chargé des Suivis", level: 3 },
+                                    { title: "Disciplinaire", level: 3 },
+                                    { title: "Trésorier", level: 3 }
+                                ]
+                            },
+                            {
+                                title: "Vice Responsable Chargé de l'Évangélisation",
+                                level: 2,
+                                subNodes: [
+                                    { title: "Chargé des Programmes et Planification", level: 3 },
+                                    { title: "Chargé des Déplacements et Équipements", level: 3 },
+                                    { title: "Disciplinaire", level: 3 },
+                                    { title: "Trésorier", level: 3 }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            musique: {
+                title: "Département de Musique",
+                definition: "Le Département de Musique est chargé de l'organisation, la coordination et le développement des activités musicales dans l'église, incluant la louange, l'adoration et les chœurs.",
+                roles: [
+                    "Diriger les temps de louange et d'adoration pendant les cultes",
+                    "Former les musiciens et les choristes",
+                    "Développer le talent musical des membres de l'église",
+                    "Préparer des chants et des productions musicales pour les événements spéciaux"
+                ],
+                attributions: {
+                    principales: [
+                        "Préparer et animer les temps de louange lors des cultes",
+                        "Organiser les répétitions des différentes formations musicales",
+                        "Gérer les instruments de musique et l'équipement sonore",
+                        "Développer un répertoire adapté aux besoins de l'église",
+                        "Accompagner les moments liturgiques par une musique appropriée"
+                    ],
+                    specifiques: [
+                        "Former les nouveaux musiciens et choristes",
+                        "Organiser des concerts et événements musicaux",
+                        "Enregistrer des productions musicales (si possible)",
+                        "Collaborer avec d'autres départements pour les programmes spéciaux",
+                        "Veiller à l'alignement théologique des chants utilisés"
+                    ]
+                },
+                postes: {
+                    "Responsable de Département": [
+                        "Superviser l'ensemble des activités musicales",
+                        "Coordonner les différentes formations musicales",
+                        "Planifier le calendrier annuel des activités",
+                        "Rendre compte au pasteur et au corps pastoral",
+                        "Gérer les ressources humaines du département"
+                    ],
+                    "Secrétaire": [
+                        "Tenir à jour les registres des membres du département",
+                        "Gérer les partitions et ressources musicales",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Communiquer les informations importantes aux membres",
+                        "Préparer les plannings des équipes de service"
+                    ],
+                    "Chargé des Planifications et Répétitions": [
+                        "Organiser le calendrier des répétitions",
+                        "Préparer les thèmes et sélections de chants",
+                        "Conduire les répétitions des équipes",
+                        "Évaluer la qualité des prestations",
+                        "Former les conducteurs de louange"
+                    ],
+                    "Instrumentiste Principal": [
+                        "Coordonner l'équipe des musiciens",
+                        "Veiller à la qualité musicale des prestations",
+                        "Former les nouveaux instrumentistes",
+                        "Maintenir les instruments en bon état",
+                        "Adapter les arrangements musicaux aux capacités des musiciens"
+                    ],
+                    "Chargé des Orchestres": [
+                        "Diriger les orchestres lors des prestations",
+                        "Composer ou arranger les partitions pour l'orchestre",
+                        "Former les musiciens aux techniques orchestrales",
+                        "Planifier les répétitions spécifiques à l'orchestre",
+                        "Veiller à l'harmonie musicale des différentes sections"
+                    ],
+                    "Disciplinaire": [
+                        "Veiller au comportement exemplaire des membres du département",
+                        "Assurer le respect des horaires et des consignes",
+                        "Intervenir en cas de conflits ou de problèmes",
+                        "Accompagner spirituellement les musiciens et choristes",
+                        "Promouvoir une éthique de service dans la louange"
+                    ]
+                },
+                equipements: [
+                    "Instruments de musique (piano/clavier, guitares, batterie, etc.)",
+                    "Système de sonorisation (consoles, microphones, enceintes)",
+                    "Partitions et recueils de chants",
+                    "Pupitres et supports pour partitions",
+                    "Métronomes et accordeurs",
+                    "Équipement d'enregistrement (si disponible)",
+                    "Robes ou uniformes pour les chorales (si approprié)"
+                ],
+                programmes: [
+                    "Répétition générale hebdomadaire (vendredi ou samedi)",
+                    "Répétitions par section (voix, instruments) pendant la semaine",
+                    "Formation musicale mensuelle pour les débutants",
+                    "Concert ou spectacle musical trimestriel",
+                    "Participation aux cultes réguliers (selon planning)",
+                    "Retraite annuelle du département",
+                    "Programmes spéciaux pour les fêtes (Noël, Pâques, etc.)"
+                ],
+                structure: [
+                    {
+                        title: "Responsable de Département",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire",
+                                level: 2
+                            },
+                            {
+                                title: "Disciplinaire",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Planifications et Répétitions",
+                                level: 2
+                            },
+                            {
+                                title: "Instrumentiste Principal",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Orchestres",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            formation: {
+                title: "Département de Formation",
+                definition: "Le Département de Formation est responsable de l'enseignement biblique, théologique et pratique au sein de l'église, assurant le développement spirituel des membres.",
+                roles: [
+                    "Élaborer et mettre en œuvre les programmes de formation spirituelle",
+                    "Organiser des cours, séminaires et ateliers bibliques",
+                    "Développer des ressources pédagogiques adaptées",
+                    "Former des enseignants et formateurs au sein de l'église"
+                ],
+                attributions: {
+                    principales: [
+                        "Concevoir un curriculum de formation progressive",
+                        "Organiser l'enseignement par niveaux et par thèmes",
+                        "Évaluer la croissance et la maturité spirituelle des membres",
+                        "Adapter les méthodes d'enseignement aux différents groupes",
+                        "Fournir des ressources pour l'étude personnelle"
+                    ],
+                    specifiques: [
+                        "Organiser des séminaires sur des thèmes spécifiques",
+                        "Préparer des formations pour les responsables",
+                        "Développer des programmes de mentorat",
+                        "Créer une bibliothèque de ressources théologiques",
+                        "Établir des partenariats avec des instituts de formation"
+                    ]
+                },
+                postes: {
+                    "Responsable": [
+                        "Superviser l'ensemble des activités de formation",
+                        "Élaborer la vision et les objectifs du département",
+                        "Coordonner les différentes équipes et programmes",
+                        "Rendre compte au pasteur et au corps pastoral",
+                        "Évaluer l'efficacité des programmes de formation"
+                    ],
+                    "Secrétaire": [
+                        "Gérer les inscriptions aux formations",
+                        "Maintenir les dossiers des étudiants",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Coordonner la communication du département",
+                        "Préparer les certificats et attestations"
+                    ],
+                    "Vice Responsable Formations Internes": [
+                        "Organiser les formations destinées aux membres de l'église",
+                        "Superviser les enseignants et formateurs internes",
+                        "Développer des programmes adaptés aux besoins de l'église",
+                        "Évaluer les résultats des formations",
+                        "Innover dans les méthodes pédagogiques"
+                    ],
+                    "Chargé des Programmes de Formation": [
+                        "Élaborer les curriculums et plans de cours",
+                        "Planifier le calendrier des formations",
+                        "Coordonner les différents modules d'enseignement",
+                        "Développer des supports pédagogiques",
+                        "Évaluer et améliorer les programmes existants"
+                    ],
+                    "Chargé des Recherches Documentaires": [
+                        "Acquérir et gérer les ressources théologiques",
+                        "Développer la bibliothèque de l'église",
+                        "Effectuer des recherches sur des sujets spécifiques",
+                        "Préparer des documents de synthèse",
+                        "Veiller à la qualité doctrinale des ressources"
+                    ],
+                    "Superviseur des Documents": [
+                        "Valider le contenu des documents de formation",
+                        "Assurer la cohérence théologique des enseignements",
+                        "Réviser les supports pédagogiques",
+                        "Classer et archiver les documents produits",
+                        "Protéger la propriété intellectuelle des ressources"
+                    ],
+                    "Chargé de l'Information des Besoins": [
+                        "Identifier les besoins en formation dans l'église",
+                        "Recueillir les demandes et suggestions des membres",
+                        "Analyser les tendances et questions émergentes",
+                        "Proposer des ajustements aux programmes",
+                        "Évaluer la satisfaction des participants"
+                    ],
+                    "Formateur": [
+                        "Préparer et dispenser les enseignements",
+                        "Adapter son approche au public cible",
+                        "Créer des exercices pratiques et des évaluations",
+                        "Accompagner les apprenants dans leur progression",
+                        "Se former continuellement pour améliorer ses compétences"
+                    ],
+                    "Disciplinaire": [
+                        "Veiller au respect des règles pendant les formations",
+                        "Maintenir un environnement d'apprentissage sain",
+                        "Accompagner les étudiants en difficulté",
+                        "Promouvoir l'application pratique des enseignements",
+                        "Évaluer le comportement et l'éthique des participants"
+                    ]
+                },
+                equipements: [
+                    "Bibles et commentaires bibliques",
+                    "Manuels de formation et livres de référence",
+                    "Matériel audiovisuel (vidéoprojecteur, écran)",
+                    "Tableaux et supports d'écriture",
+                    "Ordinateurs et logiciels éducatifs",
+                    "Photocopieuse pour les supports de cours",
+                    "Bibliothèque physique et/ou numérique"
+                ],
+                programmes: [
+                    "Formation biblique fondamentale (hebdomadaire)",
+                    "École du dimanche pour adultes (hebdomadaire)",
+                    "Séminaires thématiques (mensuel)",
+                    "Formation des responsables (bimensuelle)",
+                    "École biblique du soir (deux fois par semaine)",
+                    "Conférences théologiques (trimestrielles)",
+                    "Retraite d'étude intensive (annuelle)"
+                ],
+                structure: [
+                    {
+                        title: "Responsable",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire",
+                                level: 2
+                            },
+                            {
+                                title: "Disciplinaire",
+                                level: 2
+                            },
+                            {
+                                title: "Vice Responsable Formations Internes",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Programmes de Formation",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Recherches Documentaires",
+                                level: 2
+                            },
+                            {
+                                title: "Superviseur des Documents",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'Information des Besoins",
+                                level: 2
+                            },
+                            {
+                                title: "Formateur",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            accueil: {
+                title: "Département Accueil et Protocole",
+                definition: "Le Département Accueil et Protocole est responsable de l'accueil des fidèles et visiteurs, ainsi que de l'organisation protocolaire des cérémonies et événements de l'église.",
+                roles: [
+                    "Accueillir et orienter les fidèles et visiteurs lors des cultes",
+                    "Gérer le placement et le confort des personnes présentes",
+                    "Organiser le protocole lors des cérémonies officielles",
+                    "Veiller à la sécurité et au bon déroulement des activités"
+                ],
+                attributions: {
+                    principales: [
+                        "Organiser l'accueil à l'entrée de l'église",
+                        "Distribuer les supports nécessaires aux cultes (bulletins, livrets)",
+                        "Accompagner les nouveaux venus et les visiteurs",
+                        "Gérer le placement des fidèles et l'occupation des sièges",
+                        "Assurer la gestion des flux de personnes"
+                    ],
+                    specifiques: [
+                        "Préparer le protocole pour les événements spéciaux",
+                        "Gérer le placement des personnalités et invités spéciaux",
+                        "Coordonner les déplacements pendant les cérémonies",
+                        "Veiller à la présentation et tenue des membres du département",
+                        "Collaborer avec la sécurité pour garantir le bon ordre"
+                    ]
+                },
+                postes: {
+                    "Responsable du Département": [
+                        "Superviser l'ensemble des activités d'accueil et de protocole",
+                        "Former et coordonner les équipes",
+                        "Établir les plannings de service",
+                        "Rendre compte au pasteur et au corps pastoral",
+                        "Développer des stratégies pour améliorer l'accueil"
+                    ],
+                    "Secrétaire": [
+                        "Gérer les documents administratifs du département",
+                        "Tenir à jour les registres des équipes",
+                        "Préparer les plannings et les communiquer",
+                        "Rédiger les comptes-rendus des réunions",
+                        "Maintenir l'inventaire des équipements"
+                    ],
+                    "Chargé de l'Accueil": [
+                        "Coordonner l'équipe d'accueil à l'entrée",
+                        "Former les hôtes et hôtesses d'accueil",
+                        "Développer des procédures d'accueil efficaces",
+                        "S'occuper particulièrement des nouveaux venus",
+                        "Recueillir les coordonnées des visiteurs"
+                    ],
+                    "Chargé du Placement": [
+                        "Organiser le placement des fidèles dans la salle",
+                        "Gérer les places réservées",
+                        "Superviser les placeurs pendant les services",
+                        "Optimiser l'utilisation de l'espace",
+                        "Veiller au confort des personnes âgées ou à mobilité réduite"
+                    ],
+                    "Chargé du Protocole": [
+                        "Établir les procédures protocolaires pour les cérémonies",
+                        "Organiser l'accueil des dignitaires et invités spéciaux",
+                        "Coordonner les cortèges et processions",
+                        "Former l'équipe aux règles du protocole",
+                        "Assurer la préséance lors des événements formels"
+                    ],
+                    "Chargé des Tenues": [
+                        "Définir les codes vestimentaires de l'équipe",
+                        "Veiller à la bonne présentation du personnel d'accueil",
+                        "Gérer les uniformes ou accessoires distinctifs",
+                        "Conseiller sur les tenues appropriées pour les événements",
+                        "Maintenir l'inventaire des tenues officielles"
+                    ],
+                    "Chargé de la Discipline": [
+                        "Maintenir l'ordre pendant les services",
+                        "Intervenir discrètement en cas de perturbation",
+                        "Former l'équipe à la gestion des situations difficiles",
+                        "Veiller au respect des règles établies",
+                        "Coordonner avec la sécurité si nécessaire"
+                    ]
+                },
+                equipements: [
+                    "Badges ou uniformes distinctifs pour l'équipe",
+                    "Supports d'information pour les visiteurs",
+                    "Registres des visiteurs et fiches de contact",
+                    "Équipement de communication interne (oreillettes, talkies-walkies)",
+                    "Panneau d'information et de signalisation",
+                    "Matériel pour les VIP (sièges réservés, cartons de placement)",
+                    "Trousse de premiers secours basique"
+                ],
+                programmes: [
+                    "Briefing de l'équipe 45 minutes avant chaque service",
+                    "Formation mensuelle sur l'accueil et le protocole",
+                    "Réunion d'évaluation après les grands événements",
+                    "Rotation des équipes selon un planning établi",
+                    "Journée annuelle de perfectionnement",
+                    "Service spécial pour les grandes cérémonies (baptêmes, mariages, etc.)",
+                    "Participation aux réunions de coordination avec les autres départements"
+                ],
+                structure: [
+                    {
+                        title: "Responsable du Département",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'Accueil",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé du Placement",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé du Protocole",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Tenues",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de la Discipline",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            finances: {
+                title: "Département Finances",
+                definition: "Le Département Finances est chargé de la gestion des ressources financières de l'église, incluant la collecte, l'administration et l'allocation des fonds selon les priorités établies.",
+                roles: [
+                    "Gérer les ressources financières de l'église",
+                    "Assurer la transparence dans la gestion des fonds",
+                    "Planifier le budget et suivre son exécution",
+                    "Conseiller la direction sur les questions financières",
+                    "Gérer les obligations fiscales et administratives"
+                ],
+                attributions: {
+                    principales: [
+                        "Collecter et comptabiliser les offrandes et dîmes",
+                        "Élaborer et suivre le budget annuel",
+                        "Effectuer les paiements autorisés",
+                        "Préparer les rapports financiers réguliers",
+                        "Assurer la sécurité des fonds et des documents financiers"
+                    ],
+                    specifiques: [
+                        "Gérer les comptes bancaires de l'église",
+                        "Tenir une comptabilité conforme aux normes légales",
+                        "Organiser des campagnes de collecte de fonds pour projets spéciaux",
+                        "Conseiller sur les investissements et les dépenses importantes",
+                        "Préparer les documents pour les audits et contrôles"
+                    ]
+                },
+                postes: {
+                    "Trésorier Principal": [
+                        "Superviser l'ensemble de la gestion financière",
+                        "Présenter les rapports financiers à la direction",
+                        "Coordonner l'élaboration du budget annuel",
+                        "Autoriser les dépenses conformément au budget",
+                        "Représenter le département auprès des instances dirigeantes"
+                    ],
+                    "Comptable": [
+                        "Tenir les livres comptables à jour",
+                        "Enregistrer toutes les transactions financières",
+                        "Préparer les états financiers mensuels et annuels",
+                        "Assurer la conformité avec les normes comptables",
+                        "Conserver les pièces justificatives et documents comptables"
+                    ],
+                    "Chargé des Offrandes": [
+                        "Organiser la collecte des offrandes pendant les services",
+                        "Superviser le comptage des offrandes",
+                        "Préparer les reçus et récépissés",
+                        "Établir les statistiques des offrandes",
+                        "Former les équipes de collecte"
+                    ],
+                    "Chargé des Paiements": [
+                        "Traiter les demandes de paiement",
+                        "Vérifier les factures et justificatifs",
+                        "Préparer les chèques et virements",
+                        "Tenir le registre des paiements effectués",
+                        "Suivre les échéances de paiement"
+                    ],
+                    "Chargé du Budget": [
+                        "Élaborer les projections budgétaires",
+                        "Suivre l'exécution du budget",
+                        "Analyser les écarts budgétaires",
+                        "Proposer des ajustements si nécessaire",
+                        "Conseiller les départements sur leur gestion budgétaire"
+                    ],
+                    "Chargé des Projets Spéciaux": [
+                        "Planifier le financement des projets spéciaux",
+                        "Organiser des collectes de fonds dédiées",
+                        "Suivre les budgets spécifiques aux projets",
+                        "Évaluer la viabilité financière des nouveaux projets",
+                        "Rendre compte de l'utilisation des fonds collectés"
+                    ],
+                    "Auditeur Interne": [
+                        "Vérifier régulièrement les comptes et procédures",
+                        "Contrôler la conformité des opérations financières",
+                        "Identifier les risques et proposer des améliorations",
+                        "Préparer les audits externes",
+                        "Veiller à l'intégrité du système financier"
+                    ]
+                },
+                equipements: [
+                    "Ordinateur et logiciel de comptabilité",
+                    "Coffre-fort pour la sécurité des fonds",
+                    "Formulaires financiers (reçus, bons de commande, etc.)",
+                    "Classeurs et système d'archivage sécurisé",
+                    "Machine à compter les billets (si volume important)",
+                    "Calculatrices et fournitures de bureau",
+                    "Imprimante et scanneur pour les documents"
+                ],
+                programmes: [
+                    "Collecte des offrandes lors de chaque service",
+                    "Comptage et enregistrement immédiat après la collecte",
+                    "Réunion mensuelle du comité des finances",
+                    "Rapport financier trimestriel à la congrégation",
+                    "Préparation annuelle du budget (dernier trimestre)",
+                    "Formation annuelle des équipes financières",
+                    "Audit interne semestriel",
+                    "Audit externe annuel (si requis)"
+                ],
+                structure: [
+                    {
+                        title: "Trésorier Principal",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Comptable",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Offrandes",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Paiements",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé du Budget",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Projets Spéciaux",
+                                level: 2
+                            },
+                            {
+                                title: "Auditeur Interne",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            technique: {
+                title: "Département Technique et Logistique",
+                definition: "Le Département Technique et Logistique est responsable de la gestion des aspects techniques des services et événements, ainsi que de la communication et des publications de l'église.",
+                roles: [
+                    "Assurer le bon fonctionnement des équipements techniques",
+                    "Gérer les infrastructures audiovisuelles",
+                    "Coordonner la logistique des événements",
+                    "Produire les supports de communication",
+                    "Gérer les plateformes médiatiques de l'église"
+                ],
+                attributions: {
+                    principales: [
+                        "Installer et opérer les systèmes de sonorisation",
+                        "Gérer les équipements audiovisuels (projection, éclairage)",
+                        "Enregistrer les services et événements",
+                        "Produire les supports imprimés et numériques",
+                        "Maintenir en bon état le matériel technique"
+                    ],
+                    specifiques: [
+                        "Gérer le site web et les réseaux sociaux",
+                        "Produire des photos et vidéos des activités",
+                        "Assurer la diffusion en ligne des services (si applicable)",
+                        "Coordonner la logistique des événements spéciaux",
+                        "Former les opérateurs techniques"
+                    ]
+                },
+                postes: {
+                    "Responsable Technique": [
+                        "Superviser l'ensemble des opérations techniques",
+                        "Planifier les besoins en équipement",
+                        "Coordonner les différentes équipes techniques",
+                        "Élaborer les protocoles techniques",
+                        "Assurer la veille technologique"
+                    ],
+                    "Chargé de la Sonorisation": [
+                        "Installer et opérer le système de sonorisation",
+                        "Mixer le son pendant les services",
+                        "Maintenir les équipements audio",
+                        "Former les techniciens du son",
+                        "Résoudre les problèmes audio pendant les événements"
+                    ],
+                    "Chargé de la Projection": [
+                        "Gérer les systèmes de projection vidéo",
+                        "Préparer les présentations pour les services",
+                        "Opérer les projecteurs pendant les événements",
+                        "Maintenir le matériel de projection",
+                        "Assurer la bonne visibilité des projections"
+                    ],
+                    "Chargé de l'Éclairage": [
+                        "Installer et configurer les systèmes d'éclairage",
+                        "Créer des ambiances lumineuses adaptées",
+                        "Opérer les consoles d'éclairage pendant les services",
+                        "Maintenir les équipements d'éclairage",
+                        "Résoudre les problèmes techniques liés à l'éclairage"
+                    ],
+                    "Chargé de l'Enregistrement": [
+                        "Enregistrer les services et événements",
+                        "Produire des copies audio et vidéo",
+                        "Gérer les archives audiovisuelles",
+                        "Éditer les enregistrements si nécessaire",
+                        "Distribuer les enregistrements selon les directives"
+                    ],
+                    "Chargé des Médias Sociaux": [
+                        "Gérer les comptes sur les réseaux sociaux",
+                        "Publier régulièrement du contenu pertinent",
+                        "Interagir avec la communauté en ligne",
+                        "Analyser les performances des publications",
+                        "Développer la présence numérique de l'église"
+                    ],
+                    "Photographe/Vidéaste": [
+                        "Capturer des photos et vidéos des événements",
+                        "Éditer les images et vidéos",
+                        "Gérer la banque d'images de l'église",
+                        "Produire des montages pour les événements spéciaux",
+                        "Former les assistants en photographie/vidéo"
+                    ],
+                    "Chargé de la Logistique": [
+                        "Préparer les espaces pour les événements",
+                        "Gérer le transport des équipements",
+                        "Coordonner l'installation et le démontage",
+                        "Superviser l'équipe logistique",
+                        "Planifier les besoins matériels des événements"
+                    ],
+                    "Webmaster": [
+                        "Maintenir et mettre à jour le site web",
+                        "Gérer l'hébergement et les noms de domaine",
+                        "Assurer la sécurité et les sauvegardes du site",
+                        "Développer de nouvelles fonctionnalités",
+                        "Analyser les statistiques de visite"
+                    ]
+                },
+                equipements: [
+                    "Systèmes de sonorisation (console, microphones, enceintes)",
+                    "Équipement vidéo (projecteurs, écrans, caméras)",
+                    "Système d'éclairage (spots, consoles DMX)",
+                    "Ordinateurs et logiciels spécialisés",
+                    "Équipement d'enregistrement audio/vidéo",
+                    "Appareils photo et accessoires",
+                    "Câbles, connecteurs et adaptateurs divers",
+                    "Outils et matériel de dépannage"
+                ],
+                programmes: [
+                    "Installation technique 2 heures avant chaque service",
+                    "Tests complets des systèmes avant les événements",
+                    "Maintenance préventive mensuelle des équipements",
+                    "Réunion hebdomadaire de planification technique",
+                    "Formation trimestrielle pour les nouvelles recrues",
+                    "Publication quotidienne sur les réseaux sociaux",
+                    "Mise à jour hebdomadaire du site web",
+                    "Inventaire trimestriel du matériel"
+                ],
+                structure: [
+                    {
+                        title: "Responsable Technique",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Chargé de la Sonorisation",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de la Projection",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'Éclairage",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'Enregistrement",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Médias Sociaux",
+                                level: 2
+                            },
+                            {
+                                title: "Photographe/Vidéaste",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de la Logistique",
+                                level: 2
+                            },
+                            {
+                                title: "Webmaster",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            },
+            affaires: {
+                title: "Département Affaires Sociales",
+                definition: "Le Département Affaires Sociales est responsable des actions caritatives, de l'assistance aux membres dans le besoin et des projets sociaux de l'église dans la communauté.",
+                roles: [
+                    "Identifier les besoins sociaux au sein de l'église et de la communauté",
+                    "Organiser et coordonner les actions d'assistance sociale",
+                    "Gérer les ressources destinées aux œuvres sociales",
+                    "Développer des projets sociaux durables",
+                    "Accompagner les personnes en difficulté"
+                ],
+                attributions: {
+                    principales: [
+                        "Évaluer les besoins des membres en difficulté",
+                        "Distribuer des aides matérielles, alimentaires ou financières",
+                        "Visiter les malades et les personnes âgées",
+                        "Coordonner les actions de solidarité",
+                        "Organiser les collectes de dons pour les actions sociales"
+                    ],
+                    specifiques: [
+                        "Développer des partenariats avec des organismes sociaux",
+                        "Mettre en place des programmes de formation professionnelle",
+                        "Organiser des actions humanitaires dans la communauté",
+                        "Assister les personnes en situation d'urgence",
+                        "Gérer des projets de développement communautaire"
+                    ]
+                },
+                postes: {
+                    "Responsable des Affaires Sociales": [
+                        "Superviser l'ensemble des activités sociales",
+                        "Élaborer la stratégie sociale de l'église",
+                        "Coordonner les différentes équipes d'intervention",
+                        "Établir les budgets et priorités d'action sociale",
+                        "Représenter le département auprès des instances dirigeantes"
+                    ],
+                    "Secrétaire Social": [
+                        "Gérer les dossiers des bénéficiaires",
+                        "Tenir à jour les registres des actions menées",
+                        "Rédiger les comptes-rendus des interventions",
+                        "Assurer la confidentialité des informations",
+                        "Coordonner les communications du département"
+                    ],
+                    "Chargé de l'École et de l'Orientation": [
+                        "Superviser les programmes éducatifs",
+                        "Coordonner les bourses scolaires",
+                        "Organiser des séances d'orientation professionnelle",
+                        "Accompagner les jeunes dans leur parcours scolaire",
+                        "Développer des partenariats avec des établissements d'enseignement"
+                    ],
+                    "Chargé de l'Assistance": [
+                        "Évaluer les demandes d'aide sociale",
+                        "Coordonner la distribution des aides",
+                        "Effectuer des visites à domicile",
+                        "Proposer des solutions adaptées aux besoins",
+                        "Assurer le suivi des personnes assistées"
+                    ],
+                    "Coordinateur des Projets": [
+                        "Élaborer des projets sociaux à long terme",
+                        "Rechercher des financements pour les projets",
+                        "Superviser la mise en œuvre des projets",
+                        "Évaluer l'impact des actions réalisées",
+                        "Proposer des améliorations aux programmes existants"
+                    ],
+                    "Chargé des Visites": [
+                        "Organiser les visites aux malades et personnes âgées",
+                        "Coordonner les équipes de visiteurs",
+                        "Former les visiteurs aux bonnes pratiques",
+                        "Maintenir le contact avec les institutions médicales",
+                        "Rapporter les besoins identifiés lors des visites"
+                    ],
+                    "Gestionnaire des Ressources": [
+                        "Gérer les stocks de denrées et biens à distribuer",
+                        "Organiser les collectes de dons matériels",
+                        "Maintenir l'inventaire des ressources disponibles",
+                        "Optimiser l'utilisation des ressources",
+                        "Coordonner la logistique des distributions"
+                    ]
+                },
+                equipements: [
+                    "Espace de stockage pour les dons matériels",
+                    "Ordinateur et logiciel de gestion des bénéficiaires",
+                    "Véhicule pour les visites et transports (si disponible)",
+                    "Fournitures de bureau pour la gestion administrative",
+                    "Téléphones pour la coordination des actions",
+                    "Matériel médical de base pour les situations d'urgence",
+                    "Systèmes d'archivage sécurisés pour les dossiers confidentiels"
+                ],
+                programmes: [
+                    "Distribution alimentaire mensuelle",
+                    "Visite hebdomadaire aux personnes malades ou isolées",
+                    "Permanence d'écoute et de conseil (deux fois par semaine)",
+                    "Programme annuel de bourses scolaires",
+                    "Projet trimestriel d'action communautaire",
+                    "Formation semestrielle des bénévoles",
+                    "Réunion mensuelle de coordination du département",
+                    "Évaluation trimestrielle des actions et programmes"
+                ],
+                structure: [
+                    {
+                        title: "Responsable des Affaires Sociales",
+                        level: 1,
+                        subNodes: [
+                            {
+                                title: "Secrétaire Social",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'École et de l'Orientation",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé de l'Assistance",
+                                level: 2
+                            },
+                            {
+                                title: "Coordinateur des Projets",
+                                level: 2
+                            },
+                            {
+                                title: "Chargé des Visites",
+                                level: 2
+                            },
+                            {
+                                title: "Gestionnaire des Ressources",
+                                level: 2
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+        
+        // Structure principale de l'église
+        const mainStructure = {
+            title: "Structure Organisationnelle de l'Église",
+            nodes: [
+                {
+                    title: "Pasteur",
+                    level: 1,
+                    bgColor: "bg-pasteur",
+                    borderColor: "border-green-600",
+                    subNodes: [
+                        {
+                            title: "Corps Pastoral",
+                            level: 2,
+                            bgColor: "bg-corpsPastoral",
+                            borderColor: "border-red-400",
+                            subNodes: [
+                                {
+                                    title: "Chargé de Jeunesse",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                },
+                                {
+                                    title: "Chargé de la Formation des Disciples",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                },
+                                {
+                                    title: "Chargé des Cultes et des Programmes",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                },
+                                {
+                                    title: "Chargé des Évangélisation et Intercession",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                },
+                                {
+                                    title: "Chargé de Finances et Sociales",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                },
+                                {
+                                    title: "Chargé des Projets et Sociales",
+                                    level: 3,
+                                    bgColor: "bg-orange-200",
+                                    borderColor: "border-orange-400"
+                                }
+                            ]
+                        },
+                        {
+                            title: "Secrétariat",
+                            level: 2,
+                            bgColor: "bg-secretariat",
+                            borderColor: "border-gray-500",
+                            subNodes: [
+                                {
+                                    title: "Département des Mamans",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département des Papas",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département des Jeunes et des Enfants",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département d'Accueil et Protocole",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département de Musique",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département d'Intercession",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département de Technique et Logistique",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département d'Évangélisation",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département de Formation",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                },
+                                {
+                                    title: "Département des Affaires Sociales",
+                                    level: 3,
+                                    bgColor: "bg-departement",
+                                    borderColor: "border-purple-400"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+        
+        // Fonction pour générer l'organigramme
+        function generateOrganigramme(type) {
+            const container = document.getElementById('organigrammeContainer');
+            container.innerHTML = '';
+            
+            if (type === 'principal') {
+                // Générer l'organigramme principal
+                const orgChart = document.createElement('div');
+                orgChart.className = 'flex flex-col items-center';
+                
+                // Parcourir la structure principale
+                function renderNode(node, isRoot = false) {
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = `org-node ${node.bgColor || 'bg-white dark:bg-gray-700'} ${node.borderColor || 'border-gray-400'} p-3 rounded-lg text-center my-2 min-w-[200px] max-w-[250px] mx-auto`;
+                    nodeElement.innerHTML = `<div class="font-semibold">${node.title}</div>`;
+                    
+                    // Si c'est le nœud racine, l'ajouter directement
+                    if (isRoot) {
+                        orgChart.appendChild(nodeElement);
+                    }
+                    
+                    // Si ce nœud a des sous-nœuds
+                    if (node.subNodes && node.subNodes.length > 0) {
+                        // Ajouter une ligne verticale
+                        if (!isRoot) {
+                            const verticalLine = document.createElement('div');
+                            verticalLine.className = 'h-8 w-0.5 bg-gray-400 mx-auto';
+                            orgChart.appendChild(verticalLine);
+                        }
+                        
+                        // Créer un conteneur pour les sous-nœuds
+                        const subNodesContainer = document.createElement('div');
+                        subNodesContainer.className = 'flex flex-wrap justify-center gap-8 mt-2';
+                        
+                        // Ajouter chaque sous-nœud
+                        node.subNodes.forEach(subNode => {
+                            const subNodeContainer = document.createElement('div');
+                            subNodeContainer.className = 'flex flex-col items-center';
+                            
+                            const subNodeElement = document.createElement('div');
+                            subNodeElement.className = `org-node ${subNode.bgColor || 'bg-white dark:bg-gray-700'} ${subNode.borderColor || 'border-gray-400'} p-3 rounded-lg text-center my-2 min-w-[180px] max-w-[220px]`;
+                            subNodeElement.innerHTML = `<div class="font-semibold">${subNode.title}</div>`;
+                            
+                            subNodeContainer.appendChild(subNodeElement);
+                            
+                            // Si ce sous-nœud a des sous-nœuds
+                            if (subNode.subNodes && subNode.subNodes.length > 0) {
+                                // Ajouter une ligne verticale
+                                const verticalLine = document.createElement('div');
+                                verticalLine.className = 'h-8 w-0.5 bg-gray-400 mx-auto';
+                                subNodeContainer.appendChild(verticalLine);
+                                
+                                // Créer un conteneur pour les sous-sous-nœuds
+                                const subSubNodesContainer = document.createElement('div');
+                                subSubNodesContainer.className = 'flex flex-wrap justify-center gap-4';
+                                
+                                // Ajouter chaque sous-sous-nœud
+                                subNode.subNodes.forEach(subSubNode => {
+                                    const subSubNodeContainer = document.createElement('div');
+                                    subSubNodeContainer.className = 'flex flex-col items-center';
+                                    
+                                    const subSubNodeElement = document.createElement('div');
+                                    subSubNodeElement.className = `org-node ${subSubNode.bgColor || 'bg-white dark:bg-gray-700'} ${subSubNode.borderColor || 'border-gray-400'} p-2 rounded-lg text-center my-2 min-w-[160px] max-w-[180px] text-sm`;
+                                    subSubNodeElement.innerHTML = `<div class="font-medium">${subSubNode.title}</div>`;
+                                    
+                                    subSubNodeContainer.appendChild(subSubNodeElement);
+                                    subSubNodesContainer.appendChild(subSubNodeContainer);
+                                });
+                                
+                                subNodeContainer.appendChild(subSubNodesContainer);
+                            }
+                            
+                            subNodesContainer.appendChild(subNodeContainer);
+                        });
+                        
+                        orgChart.appendChild(subNodesContainer);
+                    }
+                }
+                
+                // Générer l'organigramme à partir de la structure principale
+                mainStructure.nodes.forEach(node => {
+                    renderNode(node, true);
+                });
+                
+                container.appendChild(orgChart);
+            } else {
+                // Générer l'organigramme d'un département spécifique
+                const department = departmentsData[type];
+                if (!department) {
+                    container.innerHTML = '<p class="text-red-500">Département non trouvé.</p>';
+                    return;
+                }
+                
+                const orgChart = document.createElement('div');
+                orgChart.className = 'flex flex-col items-center';
+                
+                // Titre du département
+                const titleElement = document.createElement('h2');
+                titleElement.className = 'text-xl font-bold mb-6 text-center';
+                titleElement.textContent = department.title;
+                orgChart.appendChild(titleElement);
+                
+                // Générer les nœuds
+                function renderDepartmentNode(node, isRoot = false) {
+                    const nodeDiv = document.createElement('div');
+                    nodeDiv.className = 'flex flex-col items-center';
+                    
+                    // Nœud
+                    const nodeElement = document.createElement('div');
+                    let levelClass;
+                    switch (node.level) {
+                        case 1: levelClass = 'bg-primary text-white'; break;
+                        case 2: levelClass = 'bg-opacity-20 bg-primary dark:bg-opacity-30'; break;
+                        case 3: levelClass = 'bg-opacity-10 bg-primary dark:bg-opacity-20'; break;
+                        default: levelClass = '';
+                    }
+                    
+                    nodeElement.className = `org-node ${levelClass} p-3 rounded-lg text-center my-2 min-w-[200px] max-w-[250px]`;
+                    nodeElement.innerHTML = `<div class="font-semibold">${node.title}</div>`;
+                    
+                    nodeDiv.appendChild(nodeElement);
+                    
+                    // Si ce nœud a des sous-nœuds
+                    if (node.subNodes && node.subNodes.length > 0) {
+                        // Ajouter une ligne verticale
+                        const verticalLine = document.createElement('div');
+                        verticalLine.className = 'h-8 w-0.5 bg-primary mx-auto';
+                        nodeDiv.appendChild(verticalLine);
+                        
+                        // Créer un conteneur pour les sous-nœuds
+                        const subNodesContainer = document.createElement('div');
+                        subNodesContainer.className = 'flex flex-wrap justify-center gap-6';
+                        
+                        // Ajouter chaque sous-nœud
+                        node.subNodes.forEach(subNode => {
+                            const subNodeDiv = renderDepartmentNode(subNode);
+                            subNodesContainer.appendChild(subNodeDiv);
+                        });
+                        
+                        nodeDiv.appendChild(subNodesContainer);
+                    }
+                    
+                    return nodeDiv;
+                }
+                
+                // Générer l'organigramme pour le département
+                if (department.structure && department.structure.length > 0) {
+                    department.structure.forEach(node => {
+                        const nodeDiv = renderDepartmentNode(node, true);
+                        orgChart.appendChild(nodeDiv);
+                    });
+                } else {
+                    orgChart.innerHTML += '<p class="text-yellow-500">Structure d\'organigramme non définie pour ce département.</p>';
+                }
+                
+                container.appendChild(orgChart);
+            }
+        }
+        
+        // Fonction pour générer la documentation d'un département
+        function generateDepartmentDocs(departmentId) {
+            const container = document.getElementById('departmentDocsContainer');
+            const department = departmentsData[departmentId];
+            
+            if (!department) {
+                container.innerHTML = '<p class="text-red-500">Département non trouvé.</p>';
+                return;
+            }
+            
+            let html = `
+                <h2 class="text-2xl font-bold mb-4">${department.title}</h2>
+                
+                <!-- Définition -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-info-circle text-primary mr-2"></i>
+                        1. Définition
+                    </h3>
+                    <p>${department.definition}</p>
+                </div>
+                
+                <!-- Rôles -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-tasks text-primary mr-2"></i>
+                        2. Rôles
+                    </h3>
+                    <ul class="list-disc ml-6 space-y-1">
+                        ${department.roles.map(role => `<li>${role}</li>`).join('')}
+                    </ul>
+                </div>
+                
+                <!-- Attributions -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-clipboard-list text-primary mr-2"></i>
+                        3. Attributions
+                    </h3>
+            `;
+            
+            // Parcourir les catégories d'attributions
+            for (const category in department.attributions) {
+                const attributions = department.attributions[category];
+                const categoryName = category.charAt(0).toUpperCase() + category.slice(1); // Mettre en majuscule
+                
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-medium mb-2">Les attributions ${categoryName.toLowerCase()}:</h4>
+                        <ul class="list-disc ml-6 space-y-1">
+                            ${attributions.map(attr => `<li>${attr}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            html += `
+                </div>
+                
+                <!-- Organigramme -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-sitemap text-primary mr-2"></i>
+                        4. Organigramme
+                    </h3>
+                    <div id="deptOrgChart" class="mt-4 bg-white dark:bg-gray-700 p-4 rounded-lg overflow-x-auto">
+                        <!-- L'organigramme du département sera ajouté ici par JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Postes et tâches -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-user-tie text-primary mr-2"></i>
+                        5. Présentation des postes et tâches attribuées
+                    </h3>
+                    <div class="space-y-4">
+            `;
+            
+            // Parcourir les postes
+            for (const poste in department.postes) {
+                const taches = department.postes[poste];
+                
+                html += `
+                    <div class="mb-4 border-b border-gray-200 dark:border-gray-700 pb-4">
+                        <h4 class="font-semibold mb-2">${poste}</h4>
+                        <ul class="list-disc ml-6 space-y-1">
+                            ${taches.map(tache => `<li>${tache}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+                
+                <!-- Équipements -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-tools text-primary mr-2"></i>
+                        6. Équipements
+                    </h3>
+                    <ul class="list-disc ml-6 space-y-1">
+                        ${department.equipements.map(equip => `<li>${equip}</li>`).join('')}
+                    </ul>
+                </div>
+                
+                <!-- Programmes -->
+                <div class="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="fas fa-calendar-alt text-primary mr-2"></i>
+                        7. Programmes
+                    </h3>
+                    <ul class="list-disc ml-6 space-y-1">
+                        ${department.programmes.map(prog => `<li>${prog}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+            
+            // Générer l'organigramme du département dans la section correspondante
+            const orgChartContainer = document.getElementById('deptOrgChart');
+            
+            function renderDeptOrgNode(node) {
+                const nodeDiv = document.createElement('div');
+                nodeDiv.className = 'flex flex-col items-center';
+                
+                // Nœud
+                const nodeElement = document.createElement('div');
+                let levelClass;
+                switch (node.level) {
+                    case 1: levelClass = 'bg-primary text-white'; break;
+                    case 2: levelClass = 'bg-opacity-20 bg-primary dark:bg-opacity-30'; break;
+                    case 3: levelClass = 'bg-opacity-10 bg-primary dark:bg-opacity-20'; break;
+                    default: levelClass = '';
+                }
+                
+                nodeElement.className = `org-node ${levelClass} p-2 rounded-lg text-center my-2 min-w-[180px] max-w-[220px]`;
+                nodeElement.innerHTML = `<div class="font-medium">${node.title}</div>`;
+                
+                nodeDiv.appendChild(nodeElement);
+                
+                // Si ce nœud a des sous-nœuds
+                if (node.subNodes && node.subNodes.length > 0) {
+                    // Ajouter une ligne verticale
+                    const verticalLine = document.createElement('div');
+                    verticalLine.className = 'h-6 w-0.5 bg-primary mx-auto';
+                    nodeDiv.appendChild(verticalLine);
+                    
+                    // Créer un conteneur pour les sous-nœuds
+                    const subNodesContainer = document.createElement('div');
+                    subNodesContainer.className = 'flex flex-wrap justify-center gap-4';
+                    
+                    // Ajouter chaque sous-nœud
+                    node.subNodes.forEach(subNode => {
+                        const subNodeDiv = renderDeptOrgNode(subNode);
+                        subNodesContainer.appendChild(subNodeDiv);
+                    });
+                    
+                    nodeDiv.appendChild(subNodesContainer);
+                }
+                
+                return nodeDiv;
+            }
+            
+            const orgDiv = document.createElement('div');
+            orgDiv.className = 'flex flex-col items-center pt-2';
+            
+            if (department.structure && department.structure.length > 0) {
+                department.structure.forEach(node => {
+                    const nodeDiv = renderDeptOrgNode(node);
+                    orgDiv.appendChild(nodeDiv);
+                });
+                orgChartContainer.appendChild(orgDiv);
+            } else {
+                orgChartContainer.innerHTML = '<p class="text-yellow-500 text-center">Structure d\'organigramme non définie pour ce département.</p>';
+            }
+        }
+        
+        // Fonction pour générer un document PDF pour un département
+        function generateDocument(type, deptId = null) {
+            let html = '';
+            let title = '';
+            
+            if (type === 'all') {
+                // Générer un document complet avec tous les départements
+                title = 'Structure Organisationnelle Complète de l\'Église';
+                
+                html = `
+                    <div class="doc-header text-center mb-8">
+                        <h1 class="text-3xl font-bold mb-2">${title}</h1>
+                        <p class="text-gray-600">Documentation détaillée de tous les départements</p>
+                    </div>
+                    
+                    <div class="doc-intro mb-8">
+                        <h2 class="text-2xl font-bold mb-4">Vue d'ensemble</h2>
+                        <p>Cette documentation présente la structure organisationnelle complète de l'église, détaillant les rôles, attributions et fonctionnement de chaque département.</p>
+                        <p class="mt-2">L'organigramme ci-dessous montre la structure hiérarchique globale de l'église:</p>
+                        
+                        <div class="org-chart-global mt-6 mb-4 text-center">
+                            <!-- Image de l'organigramme principal sera insérée ici -->
+                            <img id="mainOrgChartImg" src="" alt="Organigramme principal" class="mx-auto max-w-full h-auto">
+                        </div>
+                    </div>
+                    
+                    <div class="departments-section">
+                `;
+                
+                // Ajouter chaque département
+                for (const deptId in departmentsData) {
+                    const dept = departmentsData[deptId];
+                    
+                    html += `
+                        <div class="department-section mb-12 page-break-before">
+                            <h2 class="text-2xl font-bold mb-4 text-primary">${dept.title}</h2>
+                            
+                            <!-- Définition -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">1. Définition</h3>
+                                <p>${dept.definition}</p>
+                            </div>
+                            
+                            <!-- Rôles -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">2. Rôles</h3>
+                                <ul class="list-disc ml-6 space-y-1">
+                                    ${dept.roles.map(role => `<li>${role}</li>`).join('')}
+                                </ul>
+                            </div>
+                            
+                            <!-- Attributions -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">3. Attributions</h3>
+                    `;
+                    
+                    // Parcourir les catégories d'attributions
+                    for (const category in dept.attributions) {
+                        const attributions = dept.attributions[category];
+                        const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+                        
+                        html += `
+                            <div class="mb-4">
+                                <h4 class="font-medium mb-2">Les attributions ${categoryName.toLowerCase()}:</h4>
+                                <ul class="list-disc ml-6 space-y-1">
+                                    ${attributions.map(attr => `<li>${attr}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                            
+                            <!-- Organigramme -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">4. Organigramme</h3>
+                                <div class="dept-org-chart mt-4 mb-4 text-center">
+                                    <!-- Image de l'organigramme du département sera insérée ici -->
+                                    <img id="${deptId}OrgChartImg" src="" alt="Organigramme ${dept.title}" class="mx-auto max-w-full h-auto">
+                                </div>
+                            </div>
+                            
+                            <!-- Postes et tâches -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">5. Présentation des postes et tâches attribuées</h3>
+                                <div class="space-y-4">
+                    `;
+                    
+                    // Parcourir les postes
+                    for (const poste in dept.postes) {
+                        const taches = dept.postes[poste];
+                        
+                        html += `
+                            <div class="mb-4 pb-2">
+                                <h4 class="font-semibold mb-2">${poste}</h4>
+                                <ul class="list-disc ml-6 space-y-1">
+                                    ${taches.map(tache => `<li>${tache}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                                </div>
+                            </div>
+                            
+                            <!-- Équipements -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">6. Équipements</h3>
+                                <ul class="list-disc ml-6 space-y-1">
+                                    ${dept.equipements.map(equip => `<li>${equip}</li>`).join('')}
+                                </ul>
+                            </div>
+                            
+                            <!-- Programmes -->
+                            <div class="mb-6">
+                                <h3 class="text-xl font-semibold mb-2">7. Programmes</h3>
+                                <ul class="list-disc ml-6 space-y-1">
+                                    ${dept.programmes.map(prog => `<li>${prog}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                    </div>
+                `;
+            } else if (type === 'specific' && deptId) {
+                // Générer un document pour un département spécifique
+                const dept = departmentsData[deptId];
+                if (!dept) {
+                    return 'Département non trouvé.';
+                }
+                
+                title = `${dept.title} - Documentation Détaillée`;
+                
+                html = `
+                    <div class="doc-header text-center mb-8">
+                        <h1 class="text-3xl font-bold mb-2">${title}</h1>
+                        <p class="text-gray-600">Documentation détaillée du département</p>
+                    </div>
+                    
+                    <!-- Définition -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">1. Définition</h2>
+                        <p>${dept.definition}</p>
+                    </div>
+                    
+                    <!-- Rôles -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">2. Rôles</h2>
+                        <ul class="list-disc ml-6 space-y-1">
+                            ${dept.roles.map(role => `<li>${role}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <!-- Attributions -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">3. Attributions</h2>
+                `;
+                
+                // Parcourir les catégories d'attributions
+                for (const category in dept.attributions) {
+                    const attributions = dept.attributions[category];
+                    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+                    
+                    html += `
+                        <div class="mb-4">
+                            <h3 class="text-xl font-semibold mb-2">Les attributions ${categoryName.toLowerCase()}:</h3>
+                            <ul class="list-disc ml-6 space-y-1">
+                                ${attributions.map(attr => `<li>${attr}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                    </div>
+                    
+                    <!-- Organigramme -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">4. Organigramme</h2>
+                        <div class="dept-org-chart mt-4 mb-4 text-center">
+                            <!-- Image de l'organigramme du département sera insérée ici -->
+                            <img id="${deptId}OrgChartImg" src="" alt="Organigramme ${dept.title}" class="mx-auto max-w-full h-auto">
+                        </div>
+                    </div>
+                    
+                    <!-- Postes et tâches -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">5. Présentation des postes et tâches attribuées</h2>
+                        <div class="space-y-4">
+                `;
+                
+                // Parcourir les postes
+                for (const poste in dept.postes) {
+                    const taches = dept.postes[poste];
+                    
+                    html += `
+                        <div class="mb-4 border-b border-gray-200 pb-2">
+                            <h3 class="text-xl font-semibold mb-2">${poste}</h3>
+                            <ul class="list-disc ml-6 space-y-1">
+                                ${taches.map(tache => `<li>${tache}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                        </div>
+                    </div>
+                    
+                    <!-- Équipements -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">6. Équipements</h2>
+                        <ul class="list-disc ml-6 space-y-1">
+                            ${dept.equipements.map(equip => `<li>${equip}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <!-- Programmes -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">7. Programmes</h2>
+                        <ul class="list-disc ml-6 space-y-1">
+                            ${dept.programmes.map(prog => `<li>${prog}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            // Afficher le document dans le modal
+            document.getElementById('documentContent').innerHTML = html;
+            document.getElementById('documentModal').classList.remove('hidden');
+            
+            // Capturer les images des organigrammes pour les inclure dans le document
+            setTimeout(() => {
+                // Préparer l'organigramme principal dans un canvas hors écran
+                const orgContainer = document.getElementById('organigrammeContainer');
+                const currentOrgId = document.getElementById('organigrammeSelect').value;
+                
+                // Générer l'organigramme principal
+                document.getElementById('organigrammeSelect').value = 'principal';
+                generateOrganigramme('principal');
+                
+                // Capturer l'image après un court délai pour s'assurer que le DOM est rendu
+                setTimeout(() => {
+                    html2canvas(orgContainer).then(canvas => {
+                        const imgData = canvas.toDataURL('image/png');
+                        const mainOrgImg = document.getElementById('mainOrgChartImg');
+                        if (mainOrgImg) {
+                            mainOrgImg.src = imgData;
+                        }
+                        
+                        // Si c'est un document complet, capturer également les organigrammes des départements
+                        if (type === 'all') {
+                            captureAllDepartmentOrgCharts(currentOrgId);
+                        } else if (type === 'specific' && deptId) {
+                            // Générer l'organigramme du département spécifique
+                            document.getElementById('organigrammeSelect').value = deptId;
+                            generateOrganigramme(deptId);
+                            
+                            // Capturer l'image
+                            setTimeout(() => {
+                                html2canvas(orgContainer).then(canvas => {
+                                    const imgData = canvas.toDataURL('image/png');
+                                    const deptOrgImg = document.getElementById(`${deptId}OrgChartImg`);
+                                    if (deptOrgImg) {
+                                        deptOrgImg.src = imgData;
+                                    }
+                                    
+                                    // Restaurer l'organigramme initial
+                                    document.getElementById('organigrammeSelect').value = currentOrgId;
+                                    generateOrganigramme(currentOrgId);
+                                });
+                            }, 300);
+                        }
+                    });
+                }, 300);
+                
+                function captureAllDepartmentOrgCharts(currentOrgId) {
+                    let deptIds = Object.keys(departmentsData);
+                    let currentIndex = 0;
+                    
+                    function captureNextDepartment() {
+                        if (currentIndex < deptIds.length) {
+                            const deptId = deptIds[currentIndex];
+                            
+                            // Générer l'organigramme du département
+                            document.getElementById('organigrammeSelect').value = deptId;
+                            generateOrganigramme(deptId);
+                            
+                            // Capturer l'image
+                            setTimeout(() => {
+                                html2canvas(orgContainer).then(canvas => {
+                                    const imgData = canvas.toDataURL('image/png');
+                                    const deptOrgImg = document.getElementById(`${deptId}OrgChartImg`);
+                                    if (deptOrgImg) {
+                                        deptOrgImg.src = imgData;
+                                    }
+                                    
+                                    // Passer au département suivant
+                                    currentIndex++;
+                                    captureNextDepartment();
+                                });
+                            }, 300);
+                        } else {
+                            // Restaurer l'organigramme initial
+                            document.getElementById('organigrammeSelect').value = currentOrgId;
+                            generateOrganigramme(currentOrgId);
+                        }
+                    }
+                    
+                    captureNextDepartment();
+                }
+            }, 300);
+        }
+        
+        // Fonction pour télécharger le document
+        function downloadDocument() {
+            const content = document.getElementById('documentContent');
+            
+            // Créer un nouveau document HTML
+            const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Documentation de l'Église</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            margin: 40px;
+                        }
+                        h1 {
+                            color: #3b82f6;
+                            text-align: center;
+                            margin-bottom: 20px;
+                        }
+                        h2 {
+                            color: #3b82f6;
+                            margin-top: 30px;
+                            margin-bottom: 15px;
+                        }
+                        h3 {
+                            color: #4f46e5;
+                            margin-top: 20px;
+                            margin-bottom: 10px;
+                        }
+                        h4 {
+                            margin-top: 15px;
+                            margin-bottom: 10px;
+                        }
+                        ul {
+                            margin-bottom: 15px;
+                        }
+                        li {
+                            margin-bottom: 5px;
+                        }
+                        img {
+                            max-width: 100%;
+                            height: auto;
+                            margin: 20px 0;
+                        }
+                        .page-break-before {
+                            page-break-before: always;
+                        }
+                        .text-center {
+                            text-align: center;
+                        }
+                        .mb-2 {
+                            margin-bottom: 8px;
+                        }
+                        .mb-4 {
+                            margin-bottom: 16px;
+                        }
+                        .mb-6 {
+                            margin-bottom: 24px;
+                        }
+                        .mb-8 {
+                            margin-bottom: 32px;
+                        }
+                        .pb-2 {
+                            padding-bottom: 8px;
+                        }
+                        .ml-6 {
+                            margin-left: 24px;
+                        }
+                        .space-y-1 > * + * {
+                            margin-top: 4px;
+                        }
+                        .space-y-4 > * + * {
+                            margin-top: 16px;
+                        }
+                        .border-b {
+                            border-bottom: 1px solid #e5e7eb;
+                        }
+                        .list-disc {
+                            list-style-type: disc;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${content.innerHTML}
+                </body>
+                </html>
+            `;
+            
+            // Créer un blob et le télécharger
+            const blob = new Blob([html], { type: 'text/html' });
+            saveAs(blob, 'Documentation_Eglise.html');
+        }
+        
+        // Fonction pour exporter un organigramme en tant qu'image
+        function exportOrganigramme() {
+            const container = document.getElementById('organigrammeContainer');
+            const type = document.getElementById('organigrammeSelect').value;
+            let filename = `Organigramme_${type === 'principal' ? 'Principal' : departmentsData[type].title}.png`;
+            
+            html2canvas(container, {
+                scale: 2, // Pour une meilleure qualité
+                backgroundColor: document.documentElement.classList.contains('dark') ? '#1f2937' : '#ffffff'
+            }).then(canvas => {
+                canvas.toBlob(function(blob) {
+                    saveAs(blob, filename);
+                });
+            });
+        }
+        
+        // Fonction pour imprimer un organigramme
+        function printOrganigramme() {
+            const selectEl = document.getElementById('printOrgSelect');
+            const type = selectEl.value;
+            
+            if (type === 'all') {
+                // Imprimer tous les organigrammes
+                alert("Préparation de tous les organigrammes pour impression. Cela peut prendre un moment...");
+                
+                // Sauvegarder l'état actuel
+                const currentOrgId = document.getElementById('organigrammeSelect').value;
+                const orgContainer = document.getElementById('organigrammeContainer');
+                const originalContent = orgContainer.innerHTML;
+                
+                // Créer un nouvel élément pour l'impression
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Organigrammes de l'Église</title>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                padding: 20px;
+                            }
+                            .org-chart {
+                                page-break-after: always;
+                                margin-bottom: 30px;
+                            }
+                            h1 {
+                                text-align: center;
+                                color: #3b82f6;
+                            }
+                            h2 {
+                                text-align: center;
+                                color: #3b82f6;
+                                margin-top: 20px;
+                                margin-bottom: 20px;
+                            }
+                            img {
+                                max-width: 100%;
+                                height: auto;
+                                display: block;
+                                margin: 0 auto;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Organigrammes de l'Église</h1>
+                `);
+                
+                // Préparer l'organigramme principal
+                document.getElementById('organigrammeSelect').value = 'principal';
+                generateOrganigramme('principal');
+                
+                // Capturer l'image après un court délai
+                setTimeout(() => {
+                    html2canvas(orgContainer).then(canvas => {
+                        printWindow.document.write(`
+                            <div class="org-chart">
+                                <h2>Organigramme Principal</h2>
+                                <img src="${canvas.toDataURL('image/png')}" alt="Organigramme Principal">
+                            </div>
+                        `);
+                        
+                        // Préparer et capturer tous les autres organigrammes
+                        const deptIds = Object.keys(departmentsData);
+                        let currentIndex = 0;
+                        
+                        function captureNextDepartment() {
+                            if (currentIndex < deptIds.length) {
+                                const deptId = deptIds[currentIndex];
+                                const deptName = departmentsData[deptId].title;
+                                
+                                // Générer l'organigramme du département
+                                document.getElementById('organigrammeSelect').value = deptId;
+                                generateOrganigramme(deptId);
+                                
+                                // Capturer l'image
+                                setTimeout(() => {
+                                    html2canvas(orgContainer).then(canvas => {
+                                        printWindow.document.write(`
+                                            <div class="org-chart">
+                                                <h2>Organigramme ${deptName}</h2>
+                                                <img src="${canvas.toDataURL('image/png')}" alt="Organigramme ${deptName}">
+                                            </div>
+                                        `);
+                                        
+                                        // Passer au département suivant
+                                        currentIndex++;
+                                        captureNextDepartment();
+                                    });
+                                }, 300);
+                            } else {
+                                // Finaliser le document et l'imprimer
+                                printWindow.document.write('</body></html>');
+                                
+                                // Restaurer l'état initial
+                                document.getElementById('organigrammeSelect').value = currentOrgId;
+                                generateOrganigramme(currentOrgId);
+                                
+                                setTimeout(() => {
+                                    printWindow.document.close();
+                                    printWindow.print();
+                                }, 500);
+                            }
+                        }
+                        
+                        captureNextDepartment();
+                    });
+                }, 300);
+            } else {
+                // Imprimer un seul organigramme
+                const orgName = type === 'principal' ? 'Principal' : departmentsData[type].title;
+                
+                // Sauvegarder l'état actuel
+                const currentOrgId = document.getElementById('organigrammeSelect').value;
+                
+                // Générer l'organigramme sélectionné
+                document.getElementById('organigrammeSelect').value = type;
+                generateOrganigramme(type);
+                
+                // Créer un nouvel élément pour l'impression
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Organigramme ${orgName}</title>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                padding: 20px;
+                            }
+                            h1 {
+                                text-align: center;
+                                color: #3b82f6;
+                                margin-bottom: 30px;
+                            }
+                            img {
+                                max-width: 100%;
+                                height: auto;
+                                display: block;
+                                margin: 0 auto;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Organigramme ${orgName}</h1>
+                `);
+                
+                // Capturer l'image après un court délai
+                setTimeout(() => {
+                    const container = document.getElementById('organigrammeContainer');
+                    
+                    html2canvas(container).then(canvas => {
+                        printWindow.document.write(`
+                            <img src="${canvas.toDataURL('image/png')}" alt="Organigramme ${orgName}">
+                        `);
+                        
+                        printWindow.document.write('</body></html>');
+                        
+                        // Restaurer l'état initial
+                        document.getElementById('organigrammeSelect').value = currentOrgId;
+                        generateOrganigramme(currentOrgId);
+                        
+                        setTimeout(() => {
+                            printWindow.document.close();
+                            printWindow.print();
+                        }, 500);
+                    });
+                }, 300);
+            }
+        }
+        
+        // Fonction pour charger le contenu à éditer
+        function loadContent(deptId, section) {
+            const department = departmentsData[deptId];
+            if (!department) {
+                alert("Département non trouvé.");
+                return;
+            }
+            
+            const textarea = document.getElementById('editContentTextarea');
+            const formContainer = document.getElementById('editFormContainer');
+            
+            let content = '';
+            
+            switch (section) {
+                case 'definition':
+                    content = department.definition;
+                    break;
+                case 'roles':
+                    content = department.roles.join('\n');
+                    break;
+                case 'attributions':
+                    for (const category in department.attributions) {
+                        content += `== ${category} ==\n`;
+                        content += department.attributions[category].join('\n');
+                        content += '\n\n';
+                    }
+                    break;
+                case 'postes':
+                    for (const poste in department.postes) {
+                        content += `== ${poste} ==\n`;
+                        content += department.postes[poste].join('\n');
+                        content += '\n\n';
+                    }
+                    break;
+                case 'equipements':
+                    content = department.equipements.join('\n');
+                    break;
+                case 'programmes':
+                    content = department.programmes.join('\n');
+                    break;
+                default:
+                    content = "Section non reconnue.";
+            }
+            
+            textarea.value = content;
+            formContainer.classList.remove('hidden');
+            
+            // Stocker les informations sur la section en cours d'édition
+            textarea.dataset.department = deptId;
+            textarea.dataset.section = section;
+        }
+        
+        // Fonction pour sauvegarder les modifications
+        function saveContent() {
+            const textarea = document.getElementById('editContentTextarea');
+            const deptId = textarea.dataset.department;
+            const section = textarea.dataset.section;
+            const content = textarea.value;
+            
+            const department = departmentsData[deptId];
+            if (!department) {
+                alert("Département non trouvé.");
+                return;
+            }
+            
+            switch (section) {
+                case 'definition':
+                    department.definition = content;
+                    break;
+                case 'roles':
+                    department.roles = content.split('\n').filter(item => item.trim() !== '');
+                    break;
+                case 'attributions':
+                    const attributionsBlocks = content.split('\n\n').filter(block => block.trim() !== '');
+                    
+                    // Réinitialiser les attributions
+                    department.attributions = {};
+                    
+                    // Traiter chaque bloc
+                    attributionsBlocks.forEach(block => {
+                        const lines = block.split('\n').filter(line => line.trim() !== '');
+                        
+                        if (lines.length > 0) {
+                            // La première ligne contient la catégorie
+                            const categoryMatch = lines[0].match(/== (.*) ==/);
+                            
+                            if (categoryMatch && categoryMatch[1]) {
+                                const category = categoryMatch[1];
+                                
+                                // Les lignes suivantes sont les attributions
+                                const attributions = lines.slice(1);
+                                
+                                department.attributions[category] = attributions;
+                            }
+                        }
+                    });
+                    break;
+                case 'postes':
+                    const postesBlocks = content.split('\n\n').filter(block => block.trim() !== '');
+                    
+                    // Réinitialiser les postes
+                    department.postes = {};
+                    
+                    // Traiter chaque bloc
+                    postesBlocks.forEach(block => {
+                        const lines = block.split('\n').filter(line => line.trim() !== '');
+                        
+                        if (lines.length > 0) {
+                            // La première ligne contient le poste
+                            const posteMatch = lines[0].match(/== (.*) ==/);
+                            
+                            if (posteMatch && posteMatch[1]) {
+                                const poste = posteMatch[1];
+                                
+                                // Les lignes suivantes sont les tâches
+                                const taches = lines.slice(1);
+                                
+                                department.postes[poste] = taches;
+                            }
+                        }
+                    });
+                    break;
+                case 'equipements':
+                    department.equipements = content.split('\n').filter(item => item.trim() !== '');
+                    break;
+                case 'programmes':
+                    department.programmes = content.split('\n').filter(item => item.trim() !== '');
+                    break;
+            }
+            
+            // Cacher le formulaire d'édition
+            document.getElementById('editFormContainer').classList.add('hidden');
+            
+            // Afficher un message de confirmation
+            alert("Modifications enregistrées avec succès !");
+        }
+        
+        // Fonction pour ajouter un nouveau poste
+        function addNewPoste() {
+            const deptId = document.getElementById('addPosteDeptSelect').value;
+            const posteTitle = document.getElementById('newPosteTitle').value.trim();
+            const posteTasks = document.getElementById('newPosteTasks').value.trim();
+            const posteLevel = parseInt(document.getElementById('newPosteLevel').value);
+            
+            // Validation
+            if (!posteTitle) {
+                alert("Veuillez entrer un titre pour le poste.");
+                return;
+            }
+            
+            if (!posteTasks) {
+                alert("Veuillez entrer les tâches pour ce poste.");
+                return;
+            }
+            
+            const department = departmentsData[deptId];
+            if (!department) {
+                alert("Département non trouvé.");
+                return;
+            }
+            
+            // Ajouter le poste à la documentation
+            if (!department.postes) {
+                department.postes = {};
+            }
+            
+            department.postes[posteTitle] = posteTasks.split('\n').filter(task => task.trim() !== '');
+            
+            // Ajouter le poste à la structure de l'organigramme si nécessaire
+            if (posteLevel === 1) {
+                // Poste de niveau 1 (responsable principal)
+                if (!department.structure) {
+                    department.structure = [];
+                }
+                
+                department.structure.push({
+                    title: posteTitle,
+                    level: 1,
+                    subNodes: []
+                });
+            } else if (posteLevel === 2 && department.structure && department.structure.length > 0) {
+                // Poste de niveau 2 (adjoint/chargé)
+                const rootNode = department.structure[0];
+                
+                if (!rootNode.subNodes) {
+                    rootNode.subNodes = [];
+                }
+                
+                rootNode.subNodes.push({
+                    title: posteTitle,
+                    level: 2
+                });
+            } else if (posteLevel === 3 && department.structure && department.structure.length > 0) {
+                // Poste de niveau 3 (assistant/membre)
+                const rootNode = department.structure[0];
+                
+                if (rootNode.subNodes && rootNode.subNodes.length > 0) {
+                    // Ajouter à la première sous-structure disponible
+                    const subNode = rootNode.subNodes[0];
+                    
+                    if (!subNode.subNodes) {
+                        subNode.subNodes = [];
+                    }
+                    
+                    subNode.subNodes.push({
+                        title: posteTitle,
+                        level: 3
+                    });
+                }
+            }
+            
+            // Réinitialiser le formulaire
+            document.getElementById('newPosteTitle').value = '';
+            document.getElementById('newPosteTasks').value = '';
+            
+            // Afficher un message de confirmation
+            alert("Nouveau poste ajouté avec succès !");
+        }
+        
+        // Gestionnaires d'événements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Navigation principale
+            document.getElementById('navOrganigrammes').addEventListener('click', function() {
+                document.getElementById('sectionOrganigrammes').classList.remove('hidden');
+                document.getElementById('sectionDocumentation').classList.add('hidden');
+                document.getElementById('sectionGeneration').classList.add('hidden');
+                document.getElementById('sectionEdition').classList.add('hidden');
+                
+                // Mettre à jour le style des boutons
+                this.className = 'px-4 py-2 bg-primary text-white rounded-md';
+                document.getElementById('navDocumentation').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navGeneration').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navEdition').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                
+                // Initialiser l'organigramme actuel
+                const currentOrgType = document.getElementById('organigrammeSelect').value;
+                generateOrganigramme(currentOrgType);
+            });
+            
+            document.getElementById('navDocumentation').addEventListener('click', function() {
+                document.getElementById('sectionOrganigrammes').classList.add('hidden');
+                document.getElementById('sectionDocumentation').classList.remove('hidden');
+                document.getElementById('sectionGeneration').classList.add('hidden');
+                document.getElementById('sectionEdition').classList.add('hidden');
+                
+                // Mettre à jour le style des boutons
+                this.className = 'px-4 py-2 bg-primary text-white rounded-md';
+                document.getElementById('navOrganigrammes').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navGeneration').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navEdition').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                
+                // Générer la documentation du département actuel
+                const currentDeptId = document.getElementById('departmentDocsSelect').value;
+                generateDepartmentDocs(currentDeptId);
+            });
+            
+            document.getElementById('navGeneration').addEventListener('click', function() {
+                document.getElementById('sectionOrganigrammes').classList.add('hidden');
+                document.getElementById('sectionDocumentation').classList.add('hidden');
+                document.getElementById('sectionGeneration').classList.remove('hidden');
+                document.getElementById('sectionEdition').classList.add('hidden');
+                
+                // Mettre à jour le style des boutons
+                this.className = 'px-4 py-2 bg-primary text-white rounded-md';
+                document.getElementById('navOrganigrammes').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navDocumentation').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navEdition').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+            });
+            
+            document.getElementById('navEdition').addEventListener('click', function() {
+                document.getElementById('sectionOrganigrammes').classList.add('hidden');
+                document.getElementById('sectionDocumentation').classList.add('hidden');
+                document.getElementById('sectionGeneration').classList.add('hidden');
+                document.getElementById('sectionEdition').classList.remove('hidden');
+                
+                // Mettre à jour le style des boutons
+                this.className = 'px-4 py-2 bg-primary text-white rounded-md';
+                document.getElementById('navOrganigrammes').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navDocumentation').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                document.getElementById('navGeneration').className = 'px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-md';
+                
+                // Masquer le formulaire d'édition
+                document.getElementById('editFormContainer').classList.add('hidden');
+            });
+            
+            // Sélection d'organigramme
+            document.getElementById('organigrammeSelect').addEventListener('change', function() {
+                generateOrganigramme(this.value);
+            });
+            
+            // Sélection de département pour la documentation
+            document.getElementById('departmentDocsSelect').addEventListener('change', function() {
+                generateDepartmentDocs(this.value);
+            });
+            
+            // Sélection du type de document
+            document.getElementById('docTypeSelect').addEventListener('change', function() {
+                const specificDeptSelect = document.getElementById('specificDeptSelect');
+                
+                if (this.value === 'specific') {
+                    specificDeptSelect.classList.remove('hidden');
+                } else {
+                    specificDeptSelect.classList.add('hidden');
+                }
+            });
+            
+            // Boutons d'actions
+            document.getElementById('exportOrgBtn').addEventListener('click', exportOrganigramme);
+            document.getElementById('generateDocBtn').addEventListener('click', function() {
+                const docType = document.getElementById('docTypeSelect').value;
+                const specificDeptId = document.getElementById('specificDeptSelect').value;
+                
+                generateDocument(docType, specificDeptId);
+            });
+            document.getElementById('printOrgBtn').addEventListener('click', printOrganigramme);
+            document.getElementById('downloadDocumentBtn').addEventListener('click', downloadDocument);
+            document.getElementById('closeDocumentModalBtn').addEventListener('click', function() {
+                document.getElementById('documentModal').classList.add('hidden');
+            });
+            
+            // Édition
+            document.getElementById('loadEditBtn').addEventListener('click', function() {
+                const deptId = document.getElementById('editDeptSelect').value;
+                const section = document.getElementById('editSectionSelect').value;
+                
+                loadContent(deptId, section);
+            });
+            
+            document.getElementById('saveEditBtn').addEventListener('click', saveContent);
+            
+            document.getElementById('cancelEditBtn').addEventListener('click', function() {
+                document.getElementById('editFormContainer').classList.add('hidden');
+            });
+            
+            // Ajout de poste
+            document.getElementById('addPosteBtn').addEventListener('click', addNewPoste);
+            
+            // Initialisation
+            generateOrganigramme('principal');
+            generateDepartmentDocs('secretariat');
+        });
+    </script>
+</body>
+</html>
