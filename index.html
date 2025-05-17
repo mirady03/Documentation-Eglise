@@ -372,7 +372,48 @@
                         </button>
                     </div>
                 </div>
-            </div>
+            </div><!-- Section d'intégration avec ChatGPT-4 -->
+<div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+  <h3 class="text-xl font-semibold mb-4 flex items-center">
+    <i class="fas fa-robot mr-2 text-primary"></i>
+    Amélioration avec ChatGPT-4
+  </h3>
+  
+  <div class="mb-4">
+    <p class="text-gray-600 dark:text-gray-400 mb-4">Exportez les données du département pour les améliorer avec ChatGPT-4, puis réimportez les améliorations.</p>
+    
+    <select id="gptDeptSelect" class="w-full md:w-1/2 p-2 border rounded-md text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 mb-3">
+      <option value="secretariat">Secrétariat Général</option>
+      <option value="intercession">Département Intercession</option>
+      <option value="jeunesse">Département Jeunesse</option>
+      <option value="evangelisation">Département Évangélisation</option>
+      <option value="musique">Département Musique</option>
+      <option value="formation">Département Formation</option>
+      <option value="accueil">Département Accueil et Protocole</option>
+      <option value="finances">Département Finances</option>
+      <option value="technique">Département Technique et Logistique</option>
+      <option value="affaires">Département Affaires Sociales</option>
+    </select>
+    
+    <button id="exportToGPTBtn" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+      <i class="fas fa-file-export mr-2"></i>Exporter pour ChatGPT-4
+    </button>
+  </div>
+  
+  <div id="gptPromptContainer" class="hidden">
+    <h4 class="font-medium mb-2">Prompt pour ChatGPT-4:</h4>
+    <div class="relative">
+      <textarea id="gptPrompt" rows="10" class="w-full p-3 border rounded-md text-sm bg-gray-50 dark:bg-gray-800 font-mono" readonly></textarea>
+      <button id="copyGPTPromptBtn" class="absolute top-2 right-2 p-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+        <i class="fas fa-copy"></i>
+      </button>
+    </div>
+    <p class="text-sm text-gray-500 mt-2">1. Copiez ce texte et collez-le dans ChatGPT-4</p>
+    <p class="text-sm text-gray-500">2. Copiez la réponse de ChatGPT-4</p>
+    <p class="text-sm text-gray-500">3. Utilisez les outils d'édition de l'application pour intégrer les améliorations</p>
+  </div>
+</div>
+
         </section>
     </div>
     
@@ -3076,8 +3117,93 @@
             
             // Ajout de poste
             document.getElementById('addPosteBtn').addEventListener('click', addNewPoste);
-            
-            // Initialisation
+        // Fonction pour générer un prompt pour ChatGPT-4
+function generateGPTPrompt() {
+    const deptId = document.getElementById('gptDeptSelect').value;
+    const department = departmentsData[deptId];
+    
+    if (!department) {
+        alert("Département non trouvé.");
+        return;
+    }
+    
+    let prompt = `Agis comme un expert en organisation d'église et en gestion administrative. Analyse et améliore la documentation de ce département d'église:
+
+DÉPARTEMENT: ${department.title}
+
+DÉFINITION ACTUELLE:
+${department.definition}
+
+RÔLES ACTUELS:
+${department.roles.map(role => `- ${role}`).join('\n')}
+
+ATTRIBUTIONS ACTUELLES:`;
+
+    // Ajouter les attributions
+    for (const category in department.attributions) {
+        const attributions = department.attributions[category];
+        prompt += `\n\n${category.toUpperCase()}:`;
+        prompt += `\n${attributions.map(attr => `- ${attr}`).join('\n')}`;
+    }
+    
+    prompt += `\n\nPOSTES ACTUELS ET LEURS TÂCHES:`;
+    
+    // Ajouter les postes et tâches
+    for (const poste in department.postes) {
+        const taches = department.postes[poste];
+        prompt += `\n\n${poste}:`;
+        prompt += `\n${taches.map(tache => `- ${tache}`).join('\n')}`;
+    }
+    
+    prompt += `
+
+INSTRUCTIONS:
+1. Améliore et enrichis la DÉFINITION pour qu'elle soit plus précise et complète.
+2. Propose des RÔLES supplémentaires ou améliore les rôles existants.
+3. Enrichis les ATTRIBUTIONS avec des responsabilités plus détaillées ou nouvelles.
+4. Suggère des améliorations pour les POSTES existants et leurs TÂCHES.
+5. Propose 1-2 NOUVEAUX POSTES qui pourraient renforcer ce département, avec leurs tâches associées.
+
+Présente ta réponse de manière structurée avec des titres clairs, en maintenant le format qui permettra de copier facilement les sections améliorées dans notre système.`;
+    
+    return prompt;
+}
+
+// Fonction pour exporter vers GPT
+function exportToGPT() {
+    const prompt = generateGPTPrompt();
+    const promptTextarea = document.getElementById('gptPrompt');
+    promptTextarea.value = prompt;
+    
+    // Afficher le conteneur
+    document.getElementById('gptPromptContainer').classList.remove('hidden');
+    
+    // Faire défiler jusqu'au prompt
+    promptTextarea.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Fonction pour copier le prompt
+function copyGPTPrompt() {
+    const promptTextarea = document.getElementById('gptPrompt');
+    promptTextarea.select();
+    document.execCommand('copy');
+    
+    // Feedback visuel
+    const copyBtn = document.getElementById('copyGPTPromptBtn');
+    const originalIcon = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+    copyBtn.classList.add('bg-green-500', 'text-white');
+    
+    setTimeout(() => {
+        copyBtn.innerHTML = originalIcon;
+        copyBtn.classList.remove('bg-green-500', 'text-white');
+    }, 2000);
+}
+    
+            // Initialisation// Événements pour l'intégration GPT
+document.getElementById('exportToGPTBtn').addEventListener('click', exportToGPT);
+document.getElementById('copyGPTPromptBtn').addEventListener('click', copyGPTPrompt);
+
             generateOrganigramme('principal');
             generateDepartmentDocs('secretariat');
         });
